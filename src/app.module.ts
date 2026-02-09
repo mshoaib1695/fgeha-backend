@@ -10,6 +10,7 @@ import { RequestsModule } from './requests/requests.module';
 import { RequestTypesModule } from './request-types/request-types.module';
 import { DailyBulletinModule } from './daily-bulletin/daily-bulletin.module';
 import { RequestTypeOptionsModule } from './request-type-options/request-type-options.module';
+import { SubSectorsModule } from './sub-sectors/sub-sectors.module';
 import { VGuard } from './auth/guards/v.guard';
 
 @Module({
@@ -38,6 +39,7 @@ import { VGuard } from './auth/guards/v.guard';
     RequestTypesModule,
     RequestTypeOptionsModule,
     DailyBulletinModule,
+    SubSectorsModule,
   ],
   controllers: [AppController],
   providers: [
