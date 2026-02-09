@@ -11,7 +11,9 @@ async function bootstrap() {
   server.use(express.json({ limit: '10mb' }));
   server.use(express.urlencoded({ extended: true, limit: '10mb' }));
   server.use('/idcards', express.static(path.join(process.cwd(), 'idcards')));
+  server.use('/profiles', express.static(path.join(process.cwd(), 'profiles')));
   server.use('/daily-files', express.static(path.join(process.cwd(), 'daily-files')));
+  server.use('/request-type-icons', express.static(path.join(process.cwd(), 'request-type-icons')));
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
   app.enableCors({
     origin: true, // allow any origin in dev; set to admin URL in production

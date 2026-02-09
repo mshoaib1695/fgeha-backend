@@ -105,13 +105,13 @@ Both folders are in `.gitignore`; create them and add files as needed.
 
 ## Pushing this project to a Git repo
 
-From the **repository root** (e.g. `FGEHA-RCP`):
+From the **repository root** (e.g. `FGEHA-RSP`):
 
 1. **Ensure backend is ready to commit**
    - `.env` is not committed (in `.gitignore`); `.env.example` is committed.
    - Commit backend files:
      ```bash
-     cd d:\FGEHA-RCP
+     cd d:\FGEHA-RSP
      git add geha-backend/
      git status   # confirm only intended files
      git commit -m "feat: add FGEHA RCP backend (NestJS)"

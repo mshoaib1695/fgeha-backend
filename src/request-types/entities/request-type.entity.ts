@@ -19,6 +19,10 @@ export class RequestTypeEntity {
   @Column({ name: 'display_order', default: 0 })
   displayOrder: number;
 
+  /** Optional: icon/image URL for app home (e.g. /request-type-icons/water.svg or full URL). */
+  @Column({ name: 'icon_url', type: 'varchar', length: 500, nullable: true })
+  iconUrl: string | null;
+
   /** Optional: allow requests only in this time window (e.g. "13:00" to "14:00"). Null = no restriction. */
   @Column({ name: 'restriction_start_time', type: 'varchar', length: 5, nullable: true })
   restrictionStartTime: string | null;
@@ -36,6 +40,13 @@ export class RequestTypeEntity {
    */
   @Column({ name: 'duplicate_restriction_period', type: 'varchar', length: 10, nullable: true, default: 'none' })
   duplicateRestrictionPeriod: string | null;
+
+  /** When true, app shows under-construction screen with underConstructionMessage instead of options/form. */
+  @Column({ name: 'under_construction', type: 'boolean', default: false })
+  underConstruction: boolean;
+
+  @Column({ name: 'under_construction_message', type: 'text', nullable: true })
+  underConstructionMessage: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -7,11 +7,15 @@ import {
   Param,
   Delete,
   UseGuards,
+  Query,
+  Res,
 } from '@nestjs/common';
+import * as express from 'express';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateRequestStatusDto } from './dto/update-request-status.dto';
+import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApprovedUserGuard } from '../auth/guards/approved-user.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -46,8 +50,14 @@ export class RequestsController {
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth('JWT')
   @Get()
-  findAll(@CurrentUser() user: User) {
-    return this.requestsService.findAll(user as User);
+  async findAll(
+    @CurrentUser() user: User,
+    @Query() query: FindRequestsQueryDto,
+    @Res({ passthrough: true }) res: express.Response,
+  ) {
+    const { data, total } = await this.requestsService.findAll(user as User, query);
+    res.setHeader('X-Total-Count', String(total));
+    return data;
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

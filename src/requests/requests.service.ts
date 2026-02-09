@@ -13,6 +13,7 @@ import { User, UserRole } from '../users/entities/user.entity';
 import { SubSector } from '../users/entities/sub-sector.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateRequestStatusDto } from './dto/update-request-status.dto';
+import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
 
 /**
  * Adds a calendar-based period condition to the query: same calendar day, week (ISO), or month.
@@ -143,13 +144,37 @@ export class RequestsService {
     });
   }
 
-  async findAll(user: User): Promise<RequestEntity[]> {
+  async findAll(
+    user: User,
+    query: FindRequestsQueryDto = {},
+  ): Promise<{ data: RequestEntity[]; total: number }> {
     if (user.role !== UserRole.ADMIN)
       throw new ForbiddenException('Admin only');
-    return this.requestRepo.find({
-      order: { createdAt: 'DESC' },
-      relations: ['user', 'requestType'],
-    });
+    const qb = this.requestRepo
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.user', 'user')
+      .leftJoinAndSelect('r.requestType', 'requestType')
+      .orderBy('r.createdAt', 'DESC');
+    if (query.requestTypeId != null) {
+      qb.andWhere('r.request_type_id = :requestTypeId', { requestTypeId: query.requestTypeId });
+    }
+    if (query.status) {
+      qb.andWhere('r.status = :status', { status: query.status });
+    }
+    if (query.dateFrom) {
+      qb.andWhere('DATE(r.createdAt) >= :dateFrom', { dateFrom: query.dateFrom });
+    }
+    if (query.dateTo) {
+      qb.andWhere('DATE(r.createdAt) <= :dateTo', { dateTo: query.dateTo });
+    }
+    const total = await qb.getCount();
+    const start = query._start ?? 0;
+    const end = query._end;
+    if (end != null && end > start) {
+      qb.skip(start).take(end - start);
+    }
+    const data = await qb.getMany();
+    return { data, total };
   }
 
   async findOne(id: number, user: User): Promise<RequestEntity> {

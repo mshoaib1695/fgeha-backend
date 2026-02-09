@@ -17,6 +17,7 @@ import { SubSector } from './entities/sub-sector.entity';
 import { Request } from '../requests/entities/request.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateMeDto } from './dto/update-me.dto';
 
 @Injectable()
 export class UsersService implements OnModuleInit {
@@ -35,11 +36,19 @@ export class UsersService implements OnModuleInit {
     return path.join(process.cwd(), 'idcards');
   }
 
+  /** Directory for profile images (created at runtime if needed). */
+  private get profilesDir(): string {
+    return path.join(process.cwd(), 'profiles');
+  }
+
   async onModuleInit() {
     await this.seedSubSectorsIfEmpty();
     await this.seedAdminIfMissing();
     if (!fs.existsSync(this.idcardsDir)) {
       fs.mkdirSync(this.idcardsDir, { recursive: true });
+    }
+    if (!fs.existsSync(this.profilesDir)) {
+      fs.mkdirSync(this.profilesDir, { recursive: true });
     }
   }
 
@@ -57,6 +66,21 @@ export class UsersService implements OnModuleInit {
     const filePath = path.join(this.idcardsDir, filename);
     fs.writeFileSync(filePath, buf);
     return `idcards/${filename}`;
+  }
+
+  /**
+   * Save a base64 data URL to profiles folder. Returns relative path like "profiles/uuid.jpg".
+   */
+  private saveProfileImage(dataUrl: string): string {
+    const match = dataUrl.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!match) throw new ConflictException('Invalid image data URL');
+    const ext = match[1] === 'jpeg' || match[1] === 'jpg' ? 'jpg' : match[1];
+    const base64 = match[2];
+    const buf = Buffer.from(base64, 'base64');
+    const filename = `${randomUUID()}.${ext}`;
+    const filePath = path.join(this.profilesDir, filename);
+    fs.writeFileSync(filePath, buf);
+    return `profiles/${filename}`;
   }
 
   /** Create default admin if no admin user exists (email/password from env or defaults). */
@@ -190,22 +214,25 @@ export class UsersService implements OnModuleInit {
     return u as User;
   }
 
-  /** Current user can update their own profile (name, phone, address). No role/approvalStatus. */
+  /** Current user can update their own profile (name, phone, address, profile image). No role/approvalStatus. */
   async updateMe(
     currentUser: User,
-    updateUserDto: Pick<UpdateUserDto, 'fullName' | 'phoneCountryCode' | 'phoneNumber' | 'houseNo' | 'streetNo' | 'subSectorId'>,
+    dto: UpdateMeDto,
   ): Promise<Omit<User, 'password'>> {
     const user = await this.userRepo.findOne({ where: { id: currentUser.id } });
     if (!user) throw new NotFoundException('User not found');
-    if (updateUserDto.fullName !== undefined) user.fullName = updateUserDto.fullName;
-    if (updateUserDto.phoneCountryCode !== undefined) user.phoneCountryCode = updateUserDto.phoneCountryCode;
-    if (updateUserDto.phoneNumber !== undefined) user.phoneNumber = updateUserDto.phoneNumber;
-    if (updateUserDto.houseNo !== undefined) user.houseNo = updateUserDto.houseNo;
-    if (updateUserDto.streetNo !== undefined) user.streetNo = updateUserDto.streetNo;
-    if (updateUserDto.subSectorId !== undefined) {
-      const sub = await this.subSectorRepo.findOne({ where: { id: updateUserDto.subSectorId } });
+    if (dto.fullName !== undefined) user.fullName = dto.fullName;
+    if (dto.phoneCountryCode !== undefined) user.phoneCountryCode = dto.phoneCountryCode;
+    if (dto.phoneNumber !== undefined) user.phoneNumber = dto.phoneNumber;
+    if (dto.houseNo !== undefined) user.houseNo = dto.houseNo;
+    if (dto.streetNo !== undefined) user.streetNo = dto.streetNo;
+    if (dto.subSectorId !== undefined) {
+      const sub = await this.subSectorRepo.findOne({ where: { id: dto.subSectorId } });
       if (!sub) throw new ConflictException('Invalid sub sector');
-      user.subSectorId = updateUserDto.subSectorId;
+      user.subSectorId = dto.subSectorId;
+    }
+    if (dto.profileImage !== undefined && dto.profileImage.trim()) {
+      user.profileImage = this.saveProfileImage(dto.profileImage.trim());
     }
     const saved = await this.userRepo.save(user);
     const { password: _, ...rest } = saved;

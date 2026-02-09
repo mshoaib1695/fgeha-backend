@@ -4,13 +4,20 @@ import {
   ConflictException,
   ForbiddenException,
   OnModuleInit,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
 import { RequestTypeEntity } from './entities/request-type.entity';
 import { CreateRequestTypeDto } from './dto/create-request-type.dto';
 import { UpdateRequestTypeDto } from './dto/update-request-type.dto';
 import { User, UserRole } from '../users/entities/user.entity';
+
+const ICON_DIR = 'request-type-icons';
+const MAX_ICON_SIZE = 1024 * 1024; // 1024KB
+const ALLOWED_MIMES = ['image/svg+xml', 'image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
 const DEFAULT_TYPES: { name: string; slug: string; displayOrder: number }[] = [
   { name: 'Water', slug: 'water', displayOrder: 1 },
@@ -41,6 +48,29 @@ export class RequestTypesService implements OnModuleInit {
     return this.repo.find({
       order: { displayOrder: 'ASC', id: 'ASC' },
     });
+  }
+
+  /** Admin: upload icon for request type; returns path to use as iconUrl (e.g. /request-type-icons/xxx.png). */
+  async uploadIcon(
+    buffer: Buffer,
+    originalName: string,
+    mimetype: string,
+    user: User,
+  ): Promise<{ url: string }> {
+    if (user.role !== UserRole.ADMIN)
+      throw new ForbiddenException('Admin only');
+    if (buffer.length > MAX_ICON_SIZE)
+      throw new BadRequestException('Icon file too large (max 1024KB)');
+    if (!ALLOWED_MIMES.includes(mimetype))
+      throw new BadRequestException('Allowed: SVG, PNG, JPEG, WebP, GIF');
+    const dir = join(process.cwd(), ICON_DIR);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const ext = originalName.split('.').pop()?.toLowerCase() || (mimetype.includes('svg') ? 'svg' : 'png');
+    const safeExt = ['svg', 'png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext) ? ext : 'png';
+    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${safeExt}`;
+    const filepath = join(dir, filename);
+    writeFileSync(filepath, buffer);
+    return { url: `/${ICON_DIR}/${filename}` };
   }
 
   /** Admin: create request type */

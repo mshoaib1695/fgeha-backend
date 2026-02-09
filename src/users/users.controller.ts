@@ -12,6 +12,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateMeDto } from './dto/update-me.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -62,7 +63,7 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
   @Patch('me')
-  updateMe(@Body() body: UpdateUserDto, @CurrentUser() user: User) {
+  updateMe(@Body() body: UpdateMeDto, @CurrentUser() user: User) {
     return this.usersService.updateMe(user as User, body);
   }
 

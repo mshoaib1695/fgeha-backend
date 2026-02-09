@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsInt, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsInt, IsBoolean, MinLength, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateRequestTypeDto {
@@ -16,6 +16,12 @@ export class CreateRequestTypeDto {
   @IsInt()
   @Type(() => Number)
   displayOrder?: number;
+
+  /** Optional: icon URL (relative path like /request-type-icons/water.svg or full URL). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  iconUrl?: string | null;
 
   /** Optional: e.g. "13:00" – requests only after this time (within restriction days). */
   @IsOptional()
@@ -40,4 +46,13 @@ export class CreateRequestTypeDto {
   @IsString()
   @MaxLength(10)
   duplicateRestrictionPeriod?: string;
+
+  /** When true, app shows under-construction screen with message instead of options/form. */
+  @IsOptional()
+  @IsBoolean()
+  underConstruction?: boolean;
+
+  @IsOptional()
+  @IsString()
+  underConstructionMessage?: string | null;
 }

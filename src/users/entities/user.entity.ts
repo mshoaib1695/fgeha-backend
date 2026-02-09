@@ -63,6 +63,10 @@ export class User {
   @Column({ name: 'id_card_back', type: 'varchar', length: 255, nullable: true })
   idCardBack: string | null;
 
+  /** Profile photo path (e.g. profiles/uuid.jpg), served under /profiles */
+  @Column({ name: 'profile_image', type: 'varchar', length: 255, nullable: true })
+  profileImage: string | null;
+
   @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
   role: UserRole;
 

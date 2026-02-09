@@ -7,8 +7,14 @@ import {
   Param,
   Delete,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  ParseFilePipe,
+  MaxFileSizeValidator,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { RequestTypesService } from './request-types.service';
 import { CreateRequestTypeDto } from './dto/create-request-type.dto';
 import { UpdateRequestTypeDto } from './dto/update-request-type.dto';
@@ -19,6 +25,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserRole } from '../users/entities/user.entity';
 import { User } from '../users/entities/user.entity';
 
+const MAX_ICON_SIZE = 1024 * 1024;
+
 @ApiTags('request-types')
 @Controller('request-types')
 export class RequestTypesController {
@@ -28,6 +36,42 @@ export class RequestTypesController {
   @Get()
   findAll() {
     return this.requestTypesService.findAll();
+  }
+
+  /** Admin: upload icon (SVG/image); returns { url } to set as iconUrl. */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth('JWT')
+  @Post('upload-icon')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_ICON_SIZE },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+      required: ['file'],
+    },
+  })
+  async uploadIcon(
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [new MaxFileSizeValidator({ maxSize: MAX_ICON_SIZE })],
+      }),
+    )
+    file: { buffer: Buffer; originalname: string; mimetype: string },
+    @CurrentUser() user: User,
+  ) {
+    return this.requestTypesService.uploadIcon(
+      file.buffer,
+      file.originalname,
+      file.mimetype,
+      user as User,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
