@@ -7,17 +7,20 @@ import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ApprovedUserGuard } from './guards/approved-user.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { Public } from './decorators/public.decorator';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Public()
   @Post('register')
   register(@Body() createUserDto: CreateUserDto) {
     return this.authService.register(createUserDto);
   }
 
+  @Public()
   @UseGuards(AuthGuard('local'), ApprovedUserGuard)
   @Post('login')
   login(@Body() _body: LoginDto, @CurrentUser() user: { id: number; email: string; fullName: string; role: string; approvalStatus: string }) {

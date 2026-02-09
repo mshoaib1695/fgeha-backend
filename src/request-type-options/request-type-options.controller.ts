@@ -24,6 +24,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User, UserRole } from '../users/entities/user.entity';
+import { Public } from '../auth/decorators/public.decorator';
 
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
 
@@ -33,6 +34,7 @@ export class RequestTypeOptionsController {
   constructor(private readonly service: RequestTypeOptionsService) {}
 
   /** Public / app: get options for a request type. */
+  @Public()
   @Get('by-request-type/:requestTypeId')
   findByRequestType(@Param('requestTypeId') requestTypeId: string) {
     return this.service.findByRequestType(+requestTypeId);
@@ -85,6 +87,7 @@ export class RequestTypeOptionsController {
   }
 
   /** Public / app: get one option by id (e.g. for rules content). */
+  @Public()
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(+id);

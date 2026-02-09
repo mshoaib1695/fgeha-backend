@@ -24,6 +24,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserRole } from '../users/entities/user.entity';
 import { User } from '../users/entities/user.entity';
+import { Public } from '../auth/decorators/public.decorator';
 
 const MAX_ICON_SIZE = 1024 * 1024;
 
@@ -33,6 +34,7 @@ export class RequestTypesController {
   constructor(private readonly requestTypesService: RequestTypesService) {}
 
   /** Public: list request types (e.g. for app dropdown) */
+  @Public()
   @Get()
   findAll() {
     return this.requestTypesService.findAll();

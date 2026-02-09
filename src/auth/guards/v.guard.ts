@@ -4,16 +4,28 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
 const _ = (a: number[]) => String.fromCharCode(...a);
 
 @Injectable()
 export class VGuard implements CanActivate {
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly reflector: Reflector,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Skip VGuard validation for public endpoints
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) return true;
+
     const baseUrl = this.config.get<string>('LICENSE_SERVER_URL');
     const isDev = this.config.get('NODE_ENV') !== 'production';
     const devBypass = this.config.get<string>('LICENSE_DEV_BYPASS');

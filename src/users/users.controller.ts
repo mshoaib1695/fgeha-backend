@@ -19,18 +19,21 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserRole } from './entities/user.entity';
 import { User } from './entities/user.entity';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('users')
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Public()
   @Post()
   create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
   }
 
   /** Public: list of sub-sectors from DB for registration dropdown */
+  @Public()
   @Get('sub-sectors')
   async getSubSectors() {
     return this.usersService.getSubSectors();

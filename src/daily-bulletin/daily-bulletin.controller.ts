@@ -21,6 +21,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserRole, User } from '../users/entities/user.entity';
 import { DailyBulletinService } from './daily-bulletin.service';
 import { CreateDailyBulletinDto } from './dto/create-daily-bulletin.dto';
+import { Public } from '../auth/decorators/public.decorator';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -30,12 +31,14 @@ export class DailyBulletinController {
   constructor(private readonly service: DailyBulletinService) {}
 
   /** Public / app: get today's water tanker bulletin (if any). */
+  @Public()
   @Get('today')
   getToday() {
     return this.service.findToday();
   }
 
   /** Public / app: get bulletin for a specific date (YYYY-MM-DD). */
+  @Public()
   @Get('by-date/:date')
   getByDate(@Param('date') date: string) {
     return this.service.findByDate(date);
