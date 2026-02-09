@@ -26,4 +26,10 @@ export class CreateRequestTypeOptionDto {
   @IsOptional()
   @IsNumber()
   displayOrder?: number;
+
+  @ApiPropertyOptional({ description: 'Image URL (e.g. from upload)', maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imageUrl?: string | null;
 }

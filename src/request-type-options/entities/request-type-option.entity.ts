@@ -42,6 +42,10 @@ export class RequestTypeOptionEntity {
   @Column({ name: 'display_order', default: 0 })
   displayOrder: number;
 
+  /** Optional image URL (e.g. /request-type-option-images/xxx.png). Shown on app after header. */
+  @Column({ name: 'image_url', type: 'varchar', length: 500, nullable: true })
+  imageUrl: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

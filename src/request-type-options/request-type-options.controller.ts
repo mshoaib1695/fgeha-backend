@@ -1,5 +1,21 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { RequestTypeOptionsService } from './request-type-options.service';
 import { CreateRequestTypeOptionDto } from './dto/create-request-type-option.dto';
 import { UpdateRequestTypeOptionDto } from './dto/update-request-type-option.dto';
@@ -8,6 +24,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User, UserRole } from '../users/entities/user.entity';
+
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
 
 @ApiTags('request-type-options')
 @Controller('request-type-options')
@@ -18,6 +36,42 @@ export class RequestTypeOptionsController {
   @Get('by-request-type/:requestTypeId')
   findByRequestType(@Param('requestTypeId') requestTypeId: string) {
     return this.service.findByRequestType(+requestTypeId);
+  }
+
+  /** Admin: upload image for service option; returns { url } to set as imageUrl. */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth('JWT')
+  @Post('upload-image')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_IMAGE_SIZE },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+      required: ['file'],
+    },
+  })
+  async uploadImage(
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE })],
+      }),
+    )
+    file: { buffer: Buffer; originalname: string; mimetype: string },
+    @CurrentUser() user: User,
+  ) {
+    return this.service.uploadImage(
+      file.buffer,
+      file.originalname,
+      file.mimetype,
+      user as User,
+    );
   }
 
   /** Admin: list options (optional ?requestTypeId=1). Must be before @Get(':id'). */
