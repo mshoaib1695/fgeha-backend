@@ -190,15 +190,20 @@ function assertWithinRestriction(
     );
   }
 
-  // "Today" in Pakistan; window start/end are in Pakistan time
-  const { y, m, d } = getTodayInAdminTz(now, adminTimezone);
+  // Compare time-of-day in admin timezone (no UTC conversion = no binary-search edge cases)
+  const parts = getPartsInZone(now, adminTimezone);
+  const currentMins = (parts.hour ?? 0) * 60 + (parts.minute ?? 0);
   const startPkt = parseHHmm(start);
   const endPkt = parseHHmm(end);
-  const startUtc = localTimeInZoneToUtc(y, m, d, startPkt.h, startPkt.m, adminTimezone);
-  const endUtc = localTimeInZoneToUtc(y, m, d, endPkt.h, endPkt.m, adminTimezone);
-  const nowUtc = now.getTime();
+  const startMins = startPkt.h * 60 + startPkt.m;
+  const endMins = endPkt.h * 60 + endPkt.m;
 
-  if (nowUtc < startUtc || nowUtc > endUtc) {
+  const withinWindow =
+    startMins <= endMins
+      ? currentMins >= startMins && currentMins <= endMins
+      : currentMins >= startMins || currentMins <= endMins; // overnight window
+
+  if (!withinWindow) {
     throw new ForbiddenException(
       `${typeName} request window: allowed only between ${start} and ${end} (${adminTimezone}).`,
     );
