@@ -18,9 +18,9 @@ import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
 /**
  * IANA timezone for admin time inputs (e.g. Pakistan).
  * Uses the system/ICU timezone database so any future DST or offset changes are applied automatically.
- * Override with env ADMIN_INPUT_TIMEZONE if needed (e.g. "Asia/Karachi").
+ * Override with env ADMIN_INPUT_TIMEZONE if needed (e.g. "Asia/Islamabad").
  */
-const ADMIN_INPUT_TIMEZONE = process.env.ADMIN_INPUT_TIMEZONE ?? 'Asia/Karachi';
+const ADMIN_INPUT_TIMEZONE = process.env.ADMIN_INPUT_TIMEZONE ?? 'Asia/Islamabad';
 
 function getPartsInZone(date: Date, timeZone: string): Record<string, number> {
   const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -147,7 +147,7 @@ function parseHHmm(s: string): { h: number; m: number } {
 
 /**
  * Check if current time (UTC) is within the request type restriction.
- * Start/end and allowed days use the admin timezone (e.g. Asia/Karachi); no hardcoded offset.
+ * Start/end and allowed days use the admin timezone (e.g. Asia/Islamabad); no hardcoded offset.
  */
 function assertWithinRestriction(
   type: RequestTypeEntity,
