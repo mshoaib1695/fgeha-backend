@@ -18,9 +18,9 @@ import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
 /**
  * IANA timezone for admin time inputs (e.g. Pakistan).
  * Uses the system/ICU timezone database so any future DST or offset changes are applied automatically.
- * Override with env ADMIN_INPUT_TIMEZONE if needed (e.g. "Asia/Islamabad").
+ * Override with env ADMIN_INPUT_TIMEZONE if needed (e.g. "Asia/Karachi").
  */
-const ADMIN_INPUT_TIMEZONE = process.env.ADMIN_INPUT_TIMEZONE ?? 'Asia/Islamabad';
+const ADMIN_INPUT_TIMEZONE = process.env.ADMIN_INPUT_TIMEZONE ?? 'Asia/Karachi';
 
 function getPartsInZone(date: Date, timeZone: string): Record<string, number> {
   const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -147,7 +147,7 @@ function parseHHmm(s: string): { h: number; m: number } {
 
 /**
  * Check if current time (UTC) is within the request type restriction.
- * Start/end and allowed days use the admin timezone (e.g. Asia/Islamabad); no hardcoded offset.
+ * Start/end and allowed days use the admin timezone (e.g. Asia/Karachi); no hardcoded offset.
  */
 function assertWithinRestriction(
   type: RequestTypeEntity,
@@ -165,7 +165,7 @@ function assertWithinRestriction(
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const allowedNames = allowedDays.map((d) => dayNames[d] ?? d).join(', ');
     throw new ForbiddenException(
-      `${typeName} request window: allowed only on ${allowedNames} (${ADMIN_INPUT_TIMEZONE}).`,
+      `${typeName} request window: allowed only on ${allowedNames}.`,
     );
   }
 
@@ -178,7 +178,7 @@ function assertWithinRestriction(
 
   if (nowUtc < startUtc || nowUtc > endUtc) {
     throw new ForbiddenException(
-      `${typeName} request window: allowed only between ${start} and ${end} (${ADMIN_INPUT_TIMEZONE}).`,
+      `${typeName} request window: allowed only between ${start} and ${end}.`,
     );
   }
 }
