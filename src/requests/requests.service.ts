@@ -162,8 +162,11 @@ function parseHHmm(s: string): { h: number; m: number } {
 }
 
 /**
- * Check if current time (UTC) is within the request type restriction.
- * Start/end and allowed days are interpreted in adminTimezone (Pakistan time).
+ * Check if current time is within the request type restriction.
+ * All time checks use adminTimezone (e.g. Asia/Karachi = Pakistan time):
+ * - "Current time" = time right now in Pakistan (from UTC instant).
+ * - "Today" and "day of week" = date/weekday in Pakistan.
+ * - Window start/end (e.g. 17:00–17:30) = interpreted as Pakistan time.
  */
 function assertWithinRestriction(
   type: RequestTypeEntity,
@@ -176,6 +179,7 @@ function assertWithinRestriction(
   if (!start || !end || !days) return;
 
   const now = new Date();
+  // Current day of week in Pakistan
   const currentDay = getDayOfWeekInAdminTz(now, adminTimezone);
   const allowedDays = days.split(',').map((d) => parseInt(d.trim(), 10));
   if (!allowedDays.includes(currentDay)) {
@@ -186,6 +190,7 @@ function assertWithinRestriction(
     );
   }
 
+  // "Today" in Pakistan; window start/end are in Pakistan time
   const { y, m, d } = getTodayInAdminTz(now, adminTimezone);
   const startPkt = parseHHmm(start);
   const endPkt = parseHHmm(end);
