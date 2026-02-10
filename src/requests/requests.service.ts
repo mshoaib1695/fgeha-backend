@@ -5,6 +5,7 @@ import {
   Logger,
   ConflictException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Request as RequestEntity, RequestStatus } from './entities/request.entity';
@@ -15,12 +16,27 @@ import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateRequestStatusDto } from './dto/update-request-status.dto';
 import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
 
-/**
- * IANA timezone for admin time inputs (e.g. Pakistan).
- * Uses the system/ICU timezone database so any future DST or offset changes are applied automatically.
- * Override with env ADMIN_INPUT_TIMEZONE if needed (e.g. "Asia/Karachi").
- */
-const ADMIN_INPUT_TIMEZONE = process.env.ADMIN_INPUT_TIMEZONE ?? 'Asia/Karachi';
+const DEFAULT_ADMIN_TIMEZONE = 'Asia/Karachi';
+const FALLBACK_TIMEZONE = 'Asia/Karachi';
+
+/** Resolve IANA timezone from config/env; fallback if invalid so we never throw. */
+function resolveAdminTimezone(tz: string | undefined | null): string {
+  const raw = (tz && typeof tz === 'string' ? tz.trim() : '') || DEFAULT_ADMIN_TIMEZONE;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: raw });
+    return raw;
+  } catch {
+    return FALLBACK_TIMEZONE;
+  }
+}
+
+/** Format current time as HH:mm in the given timezone (for logging). */
+function formatTimeInZone(date: Date, timeZone: string): string {
+  const p = getPartsInZone(date, timeZone);
+  const h = p.hour ?? 0;
+  const min = p.minute ?? 0;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
 
 function getPartsInZone(date: Date, timeZone: string): Record<string, number> {
   const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -41,9 +57,9 @@ function getPartsInZone(date: Date, timeZone: string): Record<string, number> {
   return parts;
 }
 
-/** Current calendar date (y, m, d) in the admin input timezone. */
-function getTodayInAdminTz(now: Date): { y: number; m: number; d: number } {
-  const p = getPartsInZone(now, ADMIN_INPUT_TIMEZONE);
+/** Current calendar date (y, m, d) in the given timezone. */
+function getTodayInAdminTz(now: Date, timeZone: string): { y: number; m: number; d: number } {
+  const p = getPartsInZone(now, timeZone);
   return {
     y: p.year,
     m: p.month - 1, // 0-indexed for Date
@@ -51,10 +67,10 @@ function getTodayInAdminTz(now: Date): { y: number; m: number; d: number } {
   };
 }
 
-/** Day of week in admin timezone (0=Sun, 1=Mon, ..., 6=Sat). */
-function getDayOfWeekInAdminTz(now: Date): number {
+/** Day of week in given timezone (0=Sun, 1=Mon, ..., 6=Sat). */
+function getDayOfWeekInAdminTz(now: Date, timeZone: string): number {
   const weekday = new Intl.DateTimeFormat('en-US', {
-    timeZone: ADMIN_INPUT_TIMEZONE,
+    timeZone,
     weekday: 'short',
   }).format(now);
   const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
@@ -147,11 +163,12 @@ function parseHHmm(s: string): { h: number; m: number } {
 
 /**
  * Check if current time (UTC) is within the request type restriction.
- * Start/end and allowed days use the admin timezone (e.g. Asia/Karachi); no hardcoded offset.
+ * Start/end and allowed days are interpreted in adminTimezone (Pakistan time).
  */
 function assertWithinRestriction(
   type: RequestTypeEntity,
   typeName: string,
+  adminTimezone: string,
 ): void {
   const start = type.restrictionStartTime?.trim();
   const end = type.restrictionEndTime?.trim();
@@ -159,26 +176,26 @@ function assertWithinRestriction(
   if (!start || !end || !days) return;
 
   const now = new Date();
-  const currentDay = getDayOfWeekInAdminTz(now);
+  const currentDay = getDayOfWeekInAdminTz(now, adminTimezone);
   const allowedDays = days.split(',').map((d) => parseInt(d.trim(), 10));
   if (!allowedDays.includes(currentDay)) {
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const allowedNames = allowedDays.map((d) => dayNames[d] ?? d).join(', ');
     throw new ForbiddenException(
-      `${typeName} request window: allowed only on ${allowedNames}.`,
+      `${typeName} request window: allowed only on ${allowedNames} (${adminTimezone}).`,
     );
   }
 
-  const { y, m, d } = getTodayInAdminTz(now);
+  const { y, m, d } = getTodayInAdminTz(now, adminTimezone);
   const startPkt = parseHHmm(start);
   const endPkt = parseHHmm(end);
-  const startUtc = localTimeInZoneToUtc(y, m, d, startPkt.h, startPkt.m, ADMIN_INPUT_TIMEZONE);
-  const endUtc = localTimeInZoneToUtc(y, m, d, endPkt.h, endPkt.m, ADMIN_INPUT_TIMEZONE);
+  const startUtc = localTimeInZoneToUtc(y, m, d, startPkt.h, startPkt.m, adminTimezone);
+  const endUtc = localTimeInZoneToUtc(y, m, d, endPkt.h, endPkt.m, adminTimezone);
   const nowUtc = now.getTime();
 
   if (nowUtc < startUtc || nowUtc > endUtc) {
     throw new ForbiddenException(
-      `${typeName} request window: allowed only between ${start} and ${end}.`,
+      `${typeName} request window: allowed only between ${start} and ${end} (${adminTimezone}).`,
     );
   }
 }
@@ -194,6 +211,7 @@ export class RequestsService {
     private readonly requestTypeRepo: Repository<RequestTypeEntity>,
     @InjectRepository(SubSector)
     private readonly subSectorRepo: Repository<SubSector>,
+    private readonly config: ConfigService,
   ) {}
 
   async create(
@@ -201,23 +219,40 @@ export class RequestsService {
     user: User,
   ): Promise<RequestEntity> {
     const now = new Date();
+    const adminTimezoneRaw =
+      this.config.get<string>('ADMIN_INPUT_TIMEZONE') ??
+      process.env.ADMIN_INPUT_TIMEZONE ??
+      DEFAULT_ADMIN_TIMEZONE;
+    const adminTimezone = resolveAdminTimezone(adminTimezoneRaw);
+
     const timeUtc = now.toISOString();
     const timeAdminTz = new Intl.DateTimeFormat('en-CA', {
-      timeZone: ADMIN_INPUT_TIMEZONE,
+      timeZone: adminTimezone,
       dateStyle: 'short',
       timeStyle: 'medium',
       hour12: false,
     }).format(now);
+    const currentTimeHHmm = formatTimeInZone(now, adminTimezone);
+
+    this.logger.log(
+      `[Request create] START userId=${user.id} requestTypeId=${createRequestDto.requestTypeId} ` +
+        `houseNo="${createRequestDto.houseNo.trim()}" streetNo="${createRequestDto.streetNo.trim()}" ` +
+        `subSectorId=${createRequestDto.subSectorId} timeUtc=${timeUtc} timeInAdminTz=${timeAdminTz} ` +
+        `currentTimeHHmm=${currentTimeHHmm} timezone=${adminTimezone}`,
+    );
 
     const requestType = await this.requestTypeRepo.findOne({
       where: { id: createRequestDto.requestTypeId },
     });
-    if (!requestType)
+    if (!requestType) {
+      this.logger.warn(
+        `[Request create] REJECTED invalid requestType userId=${user.id} requestTypeId=${createRequestDto.requestTypeId} reason=Request type not found`,
+      );
       throw new ForbiddenException('Invalid request type');
+    }
 
     this.logger.log(
-      `[Request create] attempt userId=${user.id} requestTypeId=${createRequestDto.requestTypeId} requestTypeName="${requestType.name}" ` +
-        `timeUtc=${timeUtc} timeAdminTz=${timeAdminTz} (${ADMIN_INPUT_TIMEZONE})`,
+      `[Request create] requestType found userId=${user.id} requestTypeId=${requestType.id} requestTypeName="${requestType.name}"`,
     );
 
     const start = requestType.restrictionStartTime?.trim();
@@ -227,17 +262,26 @@ export class RequestsService {
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const allowedDayNames = days.split(',').map((d) => dayNames[parseInt(d.trim(), 10)] ?? d.trim()).join(', ');
       this.logger.log(
-        `[Request create] allowed window for "${requestType.name}": ${start}-${end} (${ADMIN_INPUT_TIMEZONE}) days=[${allowedDayNames}]`,
+        `[Request create] time restriction check userId=${user.id} requestTypeName="${requestType.name}" ` +
+          `window=${start}-${end} (${adminTimezone}) days=[${allowedDayNames}] ` +
+          `currentTime=${currentTimeHHmm} => checking if ${currentTimeHHmm} is within [${start}, ${end}]`,
       );
     } else {
-      this.logger.log(`[Request create] no time restriction for "${requestType.name}"`);
+      this.logger.log(
+        `[Request create] no time restriction userId=${user.id} requestTypeName="${requestType.name}" (no window configured)`,
+      );
     }
 
     try {
-      assertWithinRestriction(requestType, requestType.name);
+      assertWithinRestriction(requestType, requestType.name, adminTimezone);
+      this.logger.log(
+        `[Request create] time restriction PASSED userId=${user.id} requestTypeName="${requestType.name}" currentTime=${currentTimeHHmm}`,
+      );
     } catch (e) {
       this.logger.warn(
-        `[Request create] REJECTED userId=${user.id} requestTypeName="${requestType.name}" timeUtc=${timeUtc} timeAdminTz=${timeAdminTz} reason=${e instanceof Error ? e.message : String(e)}`,
+        `[Request create] REJECTED time restriction userId=${user.id} requestTypeName="${requestType.name}" ` +
+          `timeUtc=${timeUtc} timeAdminTz=${timeAdminTz} currentTime=${currentTimeHHmm} ` +
+          `reason=${e instanceof Error ? e.message : String(e)}`,
       );
       throw e;
     }
@@ -245,11 +289,28 @@ export class RequestsService {
     const subSector = await this.subSectorRepo.findOne({
       where: { id: createRequestDto.subSectorId },
     });
-    if (!subSector)
+    if (!subSector) {
+      this.logger.warn(
+        `[Request create] REJECTED invalid subSector userId=${user.id} requestTypeName="${requestType.name}" ` +
+          `subSectorId=${createRequestDto.subSectorId} reason=Sub sector not found`,
+      );
       throw new ConflictException('Invalid sub sector');
+    }
+
+    this.logger.log(
+      `[Request create] subSector found userId=${user.id} requestTypeName="${requestType.name}" ` +
+        `subSectorId=${subSector.id} subSectorName="${subSector.name}"`,
+    );
 
     const period = (requestType.duplicateRestrictionPeriod ?? 'none').toLowerCase();
     if (period && period !== 'none') {
+      const periodLabel = period === 'day' ? 'calendar day' : period === 'week' ? 'calendar week' : 'calendar month';
+      this.logger.log(
+        `[Request create] duplicate check START userId=${user.id} requestTypeName="${requestType.name}" ` +
+          `period=${periodLabel} houseNo="${createRequestDto.houseNo.trim()}" ` +
+          `streetNo="${createRequestDto.streetNo.trim()}" subSectorId=${createRequestDto.subSectorId}`,
+      );
+
       const qb = this.requestRepo
         .createQueryBuilder('r')
         .where('r.request_type_id = :requestTypeId', { requestTypeId: createRequestDto.requestTypeId })
@@ -258,18 +319,36 @@ export class RequestsService {
         .andWhere('r.sub_sector_id = :subSectorId', { subSectorId: createRequestDto.subSectorId });
       addCalendarPeriodCondition(qb, period, new Date());
       const count = await qb.getCount();
+
       if (count > 0) {
-        const periodLabel = period === 'day' ? 'calendar day' : period === 'week' ? 'calendar week' : 'calendar month';
         this.logger.warn(
-          `[Request create] REJECTED duplicate userId=${user.id} requestTypeName="${requestType.name}" period=${periodLabel}`,
+          `[Request create] REJECTED duplicate userId=${user.id} requestTypeName="${requestType.name}" ` +
+            `period=${periodLabel} existingCount=${count} ` +
+            `houseNo="${createRequestDto.houseNo.trim()}" streetNo="${createRequestDto.streetNo.trim()}" ` +
+            `subSectorId=${createRequestDto.subSectorId}`,
         );
         throw new ForbiddenException(
           `Only one ${requestType.name} request per ${periodLabel} is allowed for the same house, street and sector. There is already a request for this address in this ${periodLabel}.`,
         );
       }
+
+      this.logger.log(
+        `[Request create] duplicate check PASSED userId=${user.id} requestTypeName="${requestType.name}" ` +
+          `period=${periodLabel} existingCount=${count} (no duplicate found)`,
+      );
+    } else {
+      this.logger.log(
+        `[Request create] no duplicate restriction userId=${user.id} requestTypeName="${requestType.name}" (period=none)`,
+      );
     }
 
     const description = (createRequestDto.description ?? '').trim();
+    this.logger.log(
+      `[Request create] creating request entity userId=${user.id} requestTypeName="${requestType.name}" ` +
+        `descriptionLength=${description.length} houseNo="${createRequestDto.houseNo.trim()}" ` +
+        `streetNo="${createRequestDto.streetNo.trim()}" subSectorId=${createRequestDto.subSectorId}`,
+    );
+
     const request = this.requestRepo.create({
       requestTypeId: createRequestDto.requestTypeId,
       description: description || '',
@@ -280,8 +359,11 @@ export class RequestsService {
       status: RequestStatus.PENDING,
     });
     const saved = await this.requestRepo.save(request);
+
     this.logger.log(
-      `[Request create] SUCCESS requestId=${saved.id} userId=${user.id} requestTypeName="${requestType.name}" timeUtc=${timeUtc}`,
+      `[Request create] SUCCESS requestId=${saved.id} userId=${user.id} requestTypeName="${requestType.name}" ` +
+        `houseNo="${saved.houseNo}" streetNo="${saved.streetNo}" subSectorId=${saved.subSectorId} ` +
+        `status=${saved.status} timeUtc=${timeUtc} createdAt=${saved.createdAt?.toISOString() ?? 'null'}`,
     );
     return saved;
   }
