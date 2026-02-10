@@ -200,12 +200,47 @@ export class RequestsService {
     createRequestDto: CreateRequestDto,
     user: User,
   ): Promise<RequestEntity> {
+    const now = new Date();
+    const timeUtc = now.toISOString();
+    const timeAdminTz = new Intl.DateTimeFormat('en-CA', {
+      timeZone: ADMIN_INPUT_TIMEZONE,
+      dateStyle: 'short',
+      timeStyle: 'medium',
+      hour12: false,
+    }).format(now);
+
     const requestType = await this.requestTypeRepo.findOne({
       where: { id: createRequestDto.requestTypeId },
     });
     if (!requestType)
       throw new ForbiddenException('Invalid request type');
-    assertWithinRestriction(requestType, requestType.name);
+
+    this.logger.log(
+      `[Request create] attempt userId=${user.id} requestTypeId=${createRequestDto.requestTypeId} requestTypeName="${requestType.name}" ` +
+        `timeUtc=${timeUtc} timeAdminTz=${timeAdminTz} (${ADMIN_INPUT_TIMEZONE})`,
+    );
+
+    const start = requestType.restrictionStartTime?.trim();
+    const end = requestType.restrictionEndTime?.trim();
+    const days = requestType.restrictionDays?.trim();
+    if (start && end && days) {
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const allowedDayNames = days.split(',').map((d) => dayNames[parseInt(d.trim(), 10)] ?? d.trim()).join(', ');
+      this.logger.log(
+        `[Request create] allowed window for "${requestType.name}": ${start}-${end} (${ADMIN_INPUT_TIMEZONE}) days=[${allowedDayNames}]`,
+      );
+    } else {
+      this.logger.log(`[Request create] no time restriction for "${requestType.name}"`);
+    }
+
+    try {
+      assertWithinRestriction(requestType, requestType.name);
+    } catch (e) {
+      this.logger.warn(
+        `[Request create] REJECTED userId=${user.id} requestTypeName="${requestType.name}" timeUtc=${timeUtc} timeAdminTz=${timeAdminTz} reason=${e instanceof Error ? e.message : String(e)}`,
+      );
+      throw e;
+    }
 
     const subSector = await this.subSectorRepo.findOne({
       where: { id: createRequestDto.subSectorId },
@@ -225,6 +260,9 @@ export class RequestsService {
       const count = await qb.getCount();
       if (count > 0) {
         const periodLabel = period === 'day' ? 'calendar day' : period === 'week' ? 'calendar week' : 'calendar month';
+        this.logger.warn(
+          `[Request create] REJECTED duplicate userId=${user.id} requestTypeName="${requestType.name}" period=${periodLabel}`,
+        );
         throw new ForbiddenException(
           `Only one ${requestType.name} request per ${periodLabel} is allowed for the same house, street and sector. There is already a request for this address in this ${periodLabel}.`,
         );
@@ -241,7 +279,11 @@ export class RequestsService {
       userId: user.id,
       status: RequestStatus.PENDING,
     });
-    return this.requestRepo.save(request);
+    const saved = await this.requestRepo.save(request);
+    this.logger.log(
+      `[Request create] SUCCESS requestId=${saved.id} userId=${user.id} requestTypeName="${requestType.name}" timeUtc=${timeUtc}`,
+    );
+    return saved;
   }
 
   async findMy(userId: number): Promise<RequestEntity[]> {
