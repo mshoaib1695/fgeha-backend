@@ -16,35 +16,139 @@ import { UpdateRequestStatusDto } from './dto/update-request-status.dto';
 import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
 
 /**
- * Adds a calendar-based period condition to the query: same calendar day, week (ISO), or month.
- * Uses server date (CURDATE()) so the limit is per calendar period, not rolling duration.
+ * IANA timezone for admin time inputs (e.g. Pakistan).
+ * Uses the system/ICU timezone database so any future DST or offset changes are applied automatically.
+ * Override with env ADMIN_INPUT_TIMEZONE if needed (e.g. "Asia/Karachi").
+ */
+const ADMIN_INPUT_TIMEZONE = process.env.ADMIN_INPUT_TIMEZONE ?? 'Asia/Karachi';
+
+function getPartsInZone(date: Date, timeZone: string): Record<string, number> {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts: Record<string, number> = {};
+  for (const p of fmt.formatToParts(date)) {
+    if (p.type !== 'literal') parts[p.type] = parseInt(p.value, 10);
+  }
+  return parts;
+}
+
+/** Current calendar date (y, m, d) in the admin input timezone. */
+function getTodayInAdminTz(now: Date): { y: number; m: number; d: number } {
+  const p = getPartsInZone(now, ADMIN_INPUT_TIMEZONE);
+  return {
+    y: p.year,
+    m: p.month - 1, // 0-indexed for Date
+    d: p.day,
+  };
+}
+
+/** Day of week in admin timezone (0=Sun, 1=Mon, ..., 6=Sat). */
+function getDayOfWeekInAdminTz(now: Date): number {
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: ADMIN_INPUT_TIMEZONE,
+    weekday: 'short',
+  }).format(now);
+  const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return map[weekday] ?? 0;
+}
+
+/**
+ * Convert a local time (y, m, d, hour, minute) in the given IANA timezone to UTC timestamp.
+ * Uses the system timezone database so DST/offset changes (e.g. if Pakistan changes) are applied automatically.
+ */
+function localTimeInZoneToUtc(
+  y: number,
+  m: number,
+  d: number,
+  hour: number,
+  minute: number,
+  timeZone: string,
+): number {
+  // Search window: full calendar day in zone can span ~2 UTC days for any offset
+  const low = Date.UTC(y, m, d - 1, 0, 0, 0, 0);
+  const high = Date.UTC(y, m, d + 2, 0, 0, 0, 0);
+  let lo = low;
+  let hi = high;
+  const targetMins = hour * 60 + minute;
+  for (let i = 0; i < 25; i++) {
+    const mid = Math.floor((lo + hi) / 2);
+    const parts = getPartsInZone(new Date(mid), timeZone);
+    const py = parts.year ?? y;
+    const pm = (parts.month ?? m + 1) - 1;
+    const pd = parts.day ?? d;
+    const sameDay = py === y && pm === m && pd === d;
+    const currentMins = (parts.hour ?? 0) * 60 + (parts.minute ?? 0);
+    if (!sameDay || currentMins < targetMins) lo = mid;
+    else hi = mid;
+  }
+  return Math.floor((lo + hi) / 2);
+}
+
+/**
+ * Adds a calendar-based period condition using UTC so the limit is universal (not server timezone).
  */
 function addCalendarPeriodCondition(
   qb: SelectQueryBuilder<RequestEntity>,
   period: string,
+  utcNow: Date,
 ): void {
+  const utcDateStr = utcNow.toISOString().slice(0, 10);
+  const utcYear = utcNow.getUTCFullYear();
+  const utcMonth = utcNow.getUTCMonth() + 1;
+  const getISOWeek = (d: Date) => {
+    const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    const dayNum = t.getUTCDay() || 7;
+    t.setUTCDate(t.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+    const isoWeek = Math.ceil((((t.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    const isoYear = t.getUTCFullYear();
+    return { isoYear, isoWeek };
+  };
+  const { isoYear, isoWeek } = getISOWeek(utcNow);
+
   switch (period) {
     case 'day':
-      qb.andWhere('DATE(r.createdAt) = CURDATE()');
+      qb.andWhere('DATE(CONVERT_TZ(r.createdAt, @@session.time_zone, "+00:00")) = :utcDate', {
+        utcDate: utcDateStr,
+      });
       break;
-    case 'week':
-      qb.andWhere('YEARWEEK(r.createdAt, 1) = YEARWEEK(CURDATE(), 1)');
+    case 'week': {
+      const yearWeek = isoYear * 100 + isoWeek;
+      qb.andWhere(
+        'YEARWEEK(CONVERT_TZ(r.createdAt, @@session.time_zone, "+00:00"), 1) = :yearWeek',
+        { yearWeek },
+      );
       break;
+    }
     case 'month':
-      qb.andWhere('YEAR(r.createdAt) = YEAR(CURDATE()) AND MONTH(r.createdAt) = MONTH(CURDATE())');
+      qb.andWhere(
+        'YEAR(CONVERT_TZ(r.createdAt, @@session.time_zone, "+00:00")) = :utcYear AND MONTH(CONVERT_TZ(r.createdAt, @@session.time_zone, "+00:00")) = :utcMonth',
+        { utcYear, utcMonth },
+      );
       break;
     default:
       break;
   }
 }
 
-/** Parse "HH:mm" to minutes since midnight. */
-function timeToMinutes(s: string): number {
+function parseHHmm(s: string): { h: number; m: number } {
   const [h, m] = s.trim().split(':').map(Number);
-  return (h ?? 0) * 60 + (m ?? 0);
+  return { h: h ?? 0, m: m ?? 0 };
 }
 
-/** Check if current time (server local) is within request type restriction. Throws if outside window. */
+/**
+ * Check if current time (UTC) is within the request type restriction.
+ * Start/end and allowed days use the admin timezone (e.g. Asia/Karachi); no hardcoded offset.
+ */
 function assertWithinRestriction(
   type: RequestTypeEntity,
   typeName: string,
@@ -52,25 +156,29 @@ function assertWithinRestriction(
   const start = type.restrictionStartTime?.trim();
   const end = type.restrictionEndTime?.trim();
   const days = type.restrictionDays?.trim();
-  if (!start || !end || !days) return; // no restriction
+  if (!start || !end || !days) return;
 
   const now = new Date();
-  const currentDay = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const currentDay = getDayOfWeekInAdminTz(now);
   const allowedDays = days.split(',').map((d) => parseInt(d.trim(), 10));
   if (!allowedDays.includes(currentDay)) {
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const allowedNames = allowedDays.map((d) => dayNames[d] ?? d).join(', ');
     throw new ForbiddenException(
-      `${typeName} request window: allowed only on ${allowedNames}.`,
+      `${typeName} request window: allowed only on ${allowedNames} (${ADMIN_INPUT_TIMEZONE}).`,
     );
   }
 
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const startMinutes = timeToMinutes(start);
-  const endMinutes = timeToMinutes(end);
-  if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
+  const { y, m, d } = getTodayInAdminTz(now);
+  const startPkt = parseHHmm(start);
+  const endPkt = parseHHmm(end);
+  const startUtc = localTimeInZoneToUtc(y, m, d, startPkt.h, startPkt.m, ADMIN_INPUT_TIMEZONE);
+  const endUtc = localTimeInZoneToUtc(y, m, d, endPkt.h, endPkt.m, ADMIN_INPUT_TIMEZONE);
+  const nowUtc = now.getTime();
+
+  if (nowUtc < startUtc || nowUtc > endUtc) {
     throw new ForbiddenException(
-      `${typeName} request window: allowed only between ${start} and ${end} (server time).`,
+      `${typeName} request window: allowed only between ${start} and ${end} (${ADMIN_INPUT_TIMEZONE}).`,
     );
   }
 }
@@ -113,7 +221,7 @@ export class RequestsService {
         .andWhere('r.house_no = :houseNo', { houseNo: createRequestDto.houseNo.trim() })
         .andWhere('r.street_no = :streetNo', { streetNo: createRequestDto.streetNo.trim() })
         .andWhere('r.sub_sector_id = :subSectorId', { subSectorId: createRequestDto.subSectorId });
-      addCalendarPeriodCondition(qb, period);
+      addCalendarPeriodCondition(qb, period, new Date());
       const count = await qb.getCount();
       if (count > 0) {
         const periodLabel = period === 'day' ? 'calendar day' : period === 'week' ? 'calendar week' : 'calendar month';
