@@ -85,6 +85,15 @@ export class RequestsController {
     return this.requestsService.getStats(user as User);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth('JWT')
+  @Get('stats/daily')
+  getDailyStats(@CurrentUser() user: User, @Query('days') days?: string) {
+    const parsedDays = days != null ? Number(days) : 14;
+    return this.requestsService.getDailyStats(user as User, parsedDays);
+  }
+
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
   @Get(':id')

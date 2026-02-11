@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, SelectQueryBuilder } from 'typeorm';
+import { MoreThanOrEqual, Repository, SelectQueryBuilder } from 'typeorm';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { Request as RequestEntity, RequestStatus } from './entities/request.entity';
@@ -482,5 +482,49 @@ export class RequestsService {
       count: v.count,
     }));
     return { total, byType };
+  }
+
+  /** Admin: request counts grouped by UTC day for dashboard charting. */
+  async getDailyStats(
+    user: User,
+    days = 14,
+  ): Promise<{ date: string; count: number }[]> {
+    if (user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin only');
+    }
+
+    const normalizedDays = Number.isFinite(days)
+      ? Math.max(1, Math.min(60, Math.floor(days)))
+      : 14;
+    const startDate = new Date();
+    startDate.setUTCHours(0, 0, 0, 0);
+    startDate.setUTCDate(startDate.getUTCDate() - (normalizedDays - 1));
+
+    const rows = await this.requestRepo.find({
+      select: ['createdAt'],
+      where: {
+        createdAt: MoreThanOrEqual(startDate),
+      },
+      order: { createdAt: 'ASC' },
+    });
+
+    const countsByDate = new Map<string, number>();
+    for (let i = 0; i < normalizedDays; i += 1) {
+      const d = new Date(startDate);
+      d.setUTCDate(startDate.getUTCDate() + i);
+      countsByDate.set(d.toISOString().slice(0, 10), 0);
+    }
+
+    for (const row of rows) {
+      const key = row.createdAt.toISOString().slice(0, 10);
+      if (countsByDate.has(key)) {
+        countsByDate.set(key, (countsByDate.get(key) ?? 0) + 1);
+      }
+    }
+
+    return Array.from(countsByDate.entries()).map(([date, count]) => ({
+      date,
+      count,
+    }));
   }
 }
