@@ -7,8 +7,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
 import { Request as RequestEntity, RequestStatus } from './entities/request.entity';
 import { RequestTypeEntity } from '../request-types/entities/request-type.entity';
+import { RequestTypeOptionEntity } from '../request-type-options/entities/request-type-option.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import { SubSector } from '../users/entities/sub-sector.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
@@ -21,6 +24,9 @@ import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
  * Override with env ADMIN_INPUT_TIMEZONE if needed (e.g. "Asia/Karachi").
  */
 const ADMIN_INPUT_TIMEZONE = process.env.ADMIN_INPUT_TIMEZONE ?? 'Asia/Karachi';
+const REQUEST_IMAGE_DIR = 'request-images';
+const MAX_REQUEST_IMAGE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_REQUEST_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
 function getPartsInZone(date: Date, timeZone: string): Record<string, number> {
   const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -203,13 +209,32 @@ export class RequestsService {
     private readonly requestRepo: Repository<RequestEntity>,
     @InjectRepository(RequestTypeEntity)
     private readonly requestTypeRepo: Repository<RequestTypeEntity>,
+    @InjectRepository(RequestTypeOptionEntity)
+    private readonly requestTypeOptionRepo: Repository<RequestTypeOptionEntity>,
     @InjectRepository(SubSector)
     private readonly subSectorRepo: Repository<SubSector>,
   ) {}
 
+  private saveRequestImage(file: { buffer: Buffer; originalname: string; mimetype: string }): string {
+    if (file.buffer.length > MAX_REQUEST_IMAGE_SIZE) {
+      throw new ConflictException('Issue image too large (max 5MB)');
+    }
+    if (!ALLOWED_REQUEST_IMAGE_MIMES.includes(file.mimetype)) {
+      throw new ConflictException('Issue image must be PNG, JPEG, WebP, or GIF');
+    }
+    const dir = join(process.cwd(), REQUEST_IMAGE_DIR);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const ext = file.originalname.split('.').pop()?.toLowerCase() || 'png';
+    const safeExt = ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext) ? ext : 'png';
+    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${safeExt}`;
+    writeFileSync(join(dir, filename), file.buffer);
+    return `/${REQUEST_IMAGE_DIR}/${filename}`;
+  }
+
   async create(
     createRequestDto: CreateRequestDto,
     user: User,
+    issueImage?: { buffer: Buffer; originalname: string; mimetype: string },
   ): Promise<RequestEntity> {
     const now = new Date();
     const timeUtc = now.toISOString();
@@ -258,6 +283,30 @@ export class RequestsService {
     });
     if (!subSector)
       throw new ConflictException('Invalid sub sector');
+
+    let issueImageRequirement: 'none' | 'optional' | 'required' = 'none';
+    if (createRequestDto.requestTypeOptionId != null) {
+      const selectedOption = await this.requestTypeOptionRepo.findOne({
+        where: {
+          id: createRequestDto.requestTypeOptionId,
+          requestTypeId: createRequestDto.requestTypeId,
+        },
+      });
+      if (!selectedOption) {
+        throw new ConflictException('Invalid service option selected');
+      }
+      if (selectedOption.optionType === 'form') {
+        const cfgRequirement = selectedOption.config?.issueImage;
+        issueImageRequirement =
+          cfgRequirement === 'none' || cfgRequirement === 'optional' || cfgRequirement === 'required'
+            ? cfgRequirement
+            : 'optional';
+      }
+    }
+    if (issueImageRequirement === 'required' && !issueImage) {
+      throw new ConflictException('Please upload an issue image for this service');
+    }
+    const issueImageUrl = issueImage ? this.saveRequestImage(issueImage) : null;
 
     const period = (requestType.duplicateRestrictionPeriod ?? 'none').toLowerCase();
     if (period && period !== 'none') {
@@ -313,6 +362,7 @@ export class RequestsService {
         requestTypeId: createRequestDto.requestTypeId,
         requestNumber,
         description: description || '',
+        issueImageUrl,
         houseNo: createRequestDto.houseNo.trim(),
         streetNo: createRequestDto.streetNo.trim(),
         subSectorId: createRequestDto.subSectorId,

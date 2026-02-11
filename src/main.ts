@@ -15,6 +15,7 @@ async function bootstrap() {
   server.use('/daily-files', express.static(path.join(process.cwd(), 'daily-files')));
   server.use('/request-type-icons', express.static(path.join(process.cwd(), 'request-type-icons')));
   server.use('/request-type-option-images', express.static(path.join(process.cwd(), 'request-type-option-images')));
+  server.use('/request-images', express.static(path.join(process.cwd(), 'request-images')));
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
   app.enableCors({
     origin: true, // allow any origin in dev; set to admin URL in production

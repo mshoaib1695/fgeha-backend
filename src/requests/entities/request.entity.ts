@@ -38,6 +38,10 @@ export class Request {
   @Column({ type: 'text' })
   description: string;
 
+  /** Optional issue image uploaded with this request. */
+  @Column({ name: 'issue_image_url', type: 'varchar', length: 500, nullable: true })
+  issueImageUrl: string | null;
+
   /** Address this request is for (allows creating on behalf of another house). */
   @Column({ name: 'house_no', length: 50 })
   houseNo: string;

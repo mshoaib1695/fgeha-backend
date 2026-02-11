@@ -17,7 +17,9 @@ export class CreateRequestTypeOptionDto {
   @IsEnum(['form', 'list', 'rules', 'link'])
   optionType: OptionType;
 
-  @ApiPropertyOptional({ description: 'JSON: list={ listKey }, rules={ content }, link={ url }' })
+  @ApiPropertyOptional({
+    description: 'JSON: form={ issueImage: "none"|"optional"|"required" }, list={ listKey }, rules={ content|rules[] }, link={ url }',
+  })
   @IsOptional()
   @IsObject()
   config?: Record<string, unknown>;

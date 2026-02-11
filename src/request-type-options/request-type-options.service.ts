@@ -19,6 +19,44 @@ export class RequestTypeOptionsService {
     private readonly repo: Repository<RequestTypeOptionEntity>,
   ) {}
 
+  private normalizeConfig(
+    optionType: RequestTypeOptionEntity['optionType'],
+    config: Record<string, unknown> | RequestTypeOptionEntity['config'] | null | undefined,
+  ): RequestTypeOptionEntity['config'] {
+    if (!config || typeof config !== 'object') return null;
+    const cfg = config as Record<string, unknown>;
+    if (optionType === 'form') {
+      const issueImage = cfg.issueImage;
+      return {
+        issueImage:
+          issueImage === 'none' || issueImage === 'optional' || issueImage === 'required'
+            ? issueImage
+            : 'optional',
+      };
+    }
+    if (optionType === 'list') {
+      return { listKey: typeof cfg.listKey === 'string' ? cfg.listKey : undefined };
+    }
+    if (optionType === 'rules') {
+      const rawRules = Array.isArray(cfg.rules) ? cfg.rules : [];
+      const rules = rawRules
+        .map((r) =>
+          r && typeof r === 'object'
+            ? { description: String((r as { description?: unknown }).description ?? '').trim() }
+            : null,
+        )
+        .filter((r): r is { description: string } => !!r && !!r.description);
+      return {
+        content: typeof cfg.content === 'string' ? cfg.content : undefined,
+        rules,
+      };
+    }
+    if (optionType === 'link') {
+      return { url: typeof cfg.url === 'string' ? cfg.url : undefined };
+    }
+    return null;
+  }
+
   /** Public / app: get options for a request type, ordered by displayOrder. */
   async findByRequestType(requestTypeId: number): Promise<RequestTypeOptionEntity[]> {
     return this.repo.find({
@@ -70,7 +108,7 @@ export class RequestTypeOptionsService {
       requestTypeId: dto.requestTypeId,
       label: dto.label,
       optionType: dto.optionType,
-      config: dto.config ?? null,
+      config: this.normalizeConfig(dto.optionType, dto.config ?? null),
       displayOrder: dto.displayOrder ?? 0,
       imageUrl: dto.imageUrl ?? null,
     });
@@ -84,7 +122,9 @@ export class RequestTypeOptionsService {
     if (!option) throw new NotFoundException('Option not found');
     if (dto.label != null) option.label = dto.label;
     if (dto.optionType != null) option.optionType = dto.optionType;
-    if (dto.config !== undefined) option.config = dto.config;
+    if (dto.config !== undefined) {
+      option.config = this.normalizeConfig(dto.optionType ?? option.optionType, dto.config);
+    }
     if (dto.displayOrder != null) option.displayOrder = dto.displayOrder;
     if (dto.imageUrl !== undefined) option.imageUrl = dto.imageUrl;
     return this.repo.save(option);

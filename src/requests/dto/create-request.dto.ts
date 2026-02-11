@@ -6,6 +6,11 @@ export class CreateRequestDto {
   @Type(() => Number)
   requestTypeId: number;
 
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  requestTypeOptionId?: number;
+
   @IsString()
   @MinLength(1, { message: 'House number is required' })
   houseNo: string;

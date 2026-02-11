@@ -9,11 +9,14 @@ import {
 import { RequestTypeEntity } from '../../request-types/entities/request-type.entity';
 
 export type OptionType = 'form' | 'list' | 'rules' | 'link';
+export type FormIssueImageRequirement = 'none' | 'optional' | 'required';
 
 /** Config JSON by option_type: form={}, list={ listKey: 'daily_bulletin'|'requests'|'news' }, rules={ content: string }, link={ url: string } */
 export interface RequestTypeOptionConfig {
+  issueImage?: FormIssueImageRequirement;
   listKey?: string;
   content?: string;
+  rules?: Array<{ description?: string }>;
   url?: string;
 }
 

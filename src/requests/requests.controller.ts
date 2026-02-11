@@ -9,8 +9,13 @@ import {
   UseGuards,
   Query,
   Res,
+  UseInterceptors,
+  UploadedFile,
+  ParseFilePipeBuilder,
 } from '@nestjs/common';
 import * as express from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create-request.dto';
@@ -32,11 +37,23 @@ export class RequestsController {
   @UseGuards(JwtAuthGuard, ApprovedUserGuard)
   @ApiBearerAuth('JWT')
   @Post()
+  @UseInterceptors(
+    FileInterceptor('issueImage', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
   create(
     @Body() createRequestDto: CreateRequestDto,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addMaxSizeValidator({ maxSize: 5 * 1024 * 1024 })
+        .build({ fileIsRequired: false, errorHttpStatusCode: 400 }),
+    )
+    issueImage: { buffer: Buffer; originalname: string; mimetype: string } | undefined,
     @CurrentUser() user: User,
   ) {
-    return this.requestsService.create(createRequestDto, user);
+    return this.requestsService.create(createRequestDto, user, issueImage);
   }
 
   @UseGuards(JwtAuthGuard)
