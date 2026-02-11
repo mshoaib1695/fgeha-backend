@@ -12,7 +12,10 @@ import { RequestTypeEntity } from '../../request-types/entities/request-type.ent
 
 export enum RequestStatus {
   PENDING = 'pending',
+  CANCELLED = 'cancelled',
   IN_PROGRESS = 'in_progress',
+  COMPLETED = 'completed',
+  /** Legacy value kept for backward compatibility with old rows. */
   DONE = 'done',
 }
 
@@ -27,6 +30,10 @@ export class Request {
   @ManyToOne(() => RequestTypeEntity, (type) => type.requests, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'request_type_id' })
   requestType: RequestTypeEntity;
+
+  /** Human-friendly request number, e.g. WTR#0001. Legacy rows may be null. */
+  @Column({ name: 'request_number', type: 'varchar', length: 40, nullable: true })
+  requestNumber: string | null;
 
   @Column({ type: 'text' })
   description: string;

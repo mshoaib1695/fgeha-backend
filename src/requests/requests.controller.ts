@@ -90,7 +90,8 @@ export class RequestsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
   @Delete(':id')
-  remove(@Param('id') id: string, @CurrentUser() user: User) {
-    return this.requestsService.remove(+id, user as User);
+  async remove(@Param('id') id: string, @CurrentUser() user: User) {
+    await this.requestsService.remove(+id, user as User);
+    return { success: true };
   }
 }
