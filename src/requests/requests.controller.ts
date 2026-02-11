@@ -20,6 +20,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateRequestStatusDto } from './dto/update-request-status.dto';
+import { UpdateRequestDto } from './dto/update-request.dto';
 import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApprovedUserGuard } from '../auth/guards/approved-user.guard';
@@ -99,6 +100,18 @@ export class RequestsController {
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: User) {
     return this.requestsService.findOne(+id, user as User);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth('JWT')
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateRequestDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.requestsService.update(+id, dto, user as User);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

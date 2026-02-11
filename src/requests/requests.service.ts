@@ -16,6 +16,7 @@ import { User, UserRole } from '../users/entities/user.entity';
 import { SubSector } from '../users/entities/sub-sector.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateRequestStatusDto } from './dto/update-request-status.dto';
+import { UpdateRequestDto } from './dto/update-request.dto';
 import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
 
 /**
@@ -445,6 +446,56 @@ export class RequestsService {
     const request = await this.requestRepo.findOne({ where: { id } });
     if (!request) throw new NotFoundException('Request not found');
     request.status = dto.status;
+    return this.requestRepo.save(request);
+  }
+
+  async update(
+    id: number,
+    dto: UpdateRequestDto,
+    currentUser: User,
+  ): Promise<RequestEntity> {
+    if (currentUser.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin only');
+    }
+
+    const request = await this.requestRepo.findOne({ where: { id } });
+    if (!request) {
+      throw new NotFoundException('Request not found');
+    }
+
+    if (dto.requestTypeId != null) {
+      const requestType = await this.requestTypeRepo.findOne({
+        where: { id: dto.requestTypeId },
+      });
+      if (!requestType) {
+        throw new ConflictException('Invalid request type');
+      }
+      request.requestTypeId = dto.requestTypeId;
+    }
+
+    if (dto.subSectorId != null) {
+      const subSector = await this.subSectorRepo.findOne({
+        where: { id: dto.subSectorId },
+      });
+      if (!subSector) {
+        throw new ConflictException('Invalid sub sector');
+      }
+      request.subSectorId = dto.subSectorId;
+    }
+
+    if (dto.houseNo != null) {
+      request.houseNo = dto.houseNo.trim();
+    }
+    if (dto.streetNo != null) {
+      request.streetNo = dto.streetNo.trim();
+    }
+    if (dto.description != null) {
+      request.description = dto.description.trim();
+    }
+    if (dto.status != null) {
+      request.status = dto.status;
+    }
+
     return this.requestRepo.save(request);
   }
 
