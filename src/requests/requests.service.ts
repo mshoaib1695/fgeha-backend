@@ -24,7 +24,29 @@ import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
  * Uses the system/ICU timezone database so any future DST or offset changes are applied automatically.
  * Override with env ADMIN_INPUT_TIMEZONE if needed (e.g. "Asia/Karachi").
  */
-const ADMIN_INPUT_TIMEZONE = process.env.ADMIN_INPUT_TIMEZONE ?? 'Asia/Karachi';
+const ADMIN_INPUT_TIMEZONE_DEFAULT = 'Asia/Karachi';
+function isValidIanaTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveAdminInputTimeZone(raw?: string): string {
+  const configured = raw?.trim();
+  if (!configured) return ADMIN_INPUT_TIMEZONE_DEFAULT;
+
+  if (isValidIanaTimeZone(configured)) return configured;
+
+  console.warn(
+    `[RequestsService] Invalid ADMIN_INPUT_TIMEZONE="${configured}". Using "${ADMIN_INPUT_TIMEZONE_DEFAULT}" instead.`,
+  );
+  return ADMIN_INPUT_TIMEZONE_DEFAULT;
+}
+
+const ADMIN_INPUT_TIMEZONE = resolveAdminInputTimeZone(process.env.ADMIN_INPUT_TIMEZONE);
 const REQUEST_IMAGE_DIR = 'request-images';
 const MAX_REQUEST_IMAGE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_REQUEST_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
