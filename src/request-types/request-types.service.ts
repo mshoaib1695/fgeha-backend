@@ -117,6 +117,12 @@ export class RequestTypesService implements OnModuleInit {
       const existing = await this.repo.findOne({ where: { slug: dto.slug } });
       if (existing && existing.id !== id) throw new ConflictException('Slug already exists');
     }
+    if (dto.requestNumberPrefix != null) {
+      dto.requestNumberPrefix = dto.requestNumberPrefix.trim().toUpperCase();
+      if (!dto.requestNumberPrefix) {
+        dto.requestNumberPrefix = null;
+      }
+    }
     Object.assign(entity, dto);
     // Numbering config is backend-managed only.
     if (!entity.requestNumberPrefix?.trim()) {
