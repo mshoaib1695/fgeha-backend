@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
@@ -135,6 +135,32 @@ export class RequestTypeOptionsService {
     if (user.role !== UserRole.ADMIN) throw new ForbiddenException('Admin only');
     const option = await this.repo.findOne({ where: { id } });
     if (!option) throw new NotFoundException('Option not found');
-    await this.repo.remove(option);
+    try {
+      // Legacy compatibility: some deployments may still have requests.request_type_option_id FK.
+      // If present, detach rows first so deleting service options works consistently.
+      const columnCheck = (await this.repo.query(
+        `SELECT COUNT(*) AS cnt
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = 'requests'
+           AND COLUMN_NAME = 'request_type_option_id'`,
+      )) as Array<{ cnt?: number | string }>;
+      const hasLegacyRefColumn = Number(columnCheck?.[0]?.cnt ?? 0) > 0;
+
+      if (hasLegacyRefColumn) {
+        await this.repo.query(
+          'UPDATE requests SET request_type_option_id = NULL WHERE request_type_option_id = ?',
+          [id],
+        );
+      }
+
+      await this.repo.delete(id);
+    } catch (e) {
+      const err = e as { code?: string; errno?: number; message?: string };
+      if (err.code === 'ER_ROW_IS_REFERENCED_2' || err.errno === 1451) {
+        throw new ConflictException('This option is in use and cannot be deleted yet.');
+      }
+      throw e;
+    }
   }
 }

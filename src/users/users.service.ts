@@ -150,7 +150,7 @@ export class UsersService implements OnModuleInit {
       ...dtoWithoutCards,
       password: hashed,
       role: UserRole.USER,
-      approvalStatus: ApprovalStatus.PENDING,
+      approvalStatus: ApprovalStatus.APPROVED,
       idCardFront: idCardFrontPath,
       idCardBack: idCardBackPath,
     });

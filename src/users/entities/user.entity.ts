@@ -73,7 +73,7 @@ export class User {
   @Column({
     type: 'enum',
     enum: ApprovalStatus,
-    default: ApprovalStatus.PENDING,
+    default: ApprovalStatus.APPROVED,
   })
   approvalStatus: ApprovalStatus;
 
