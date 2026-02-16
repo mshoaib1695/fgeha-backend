@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsEnum, IsNumber, IsObject, IsOptional, MaxLength } from 'class-validator';
 
-export type OptionType = 'form' | 'list' | 'rules' | 'link';
+export type OptionType = 'form' | 'list' | 'rules' | 'link' | 'phone';
 
 export class CreateRequestTypeOptionDto {
   @ApiProperty()
@@ -13,12 +13,12 @@ export class CreateRequestTypeOptionDto {
   @MaxLength(200)
   label: string;
 
-  @ApiProperty({ enum: ['form', 'list', 'rules', 'link'] })
-  @IsEnum(['form', 'list', 'rules', 'link'])
+  @ApiProperty({ enum: ['form', 'list', 'rules', 'link', 'phone'] })
+  @IsEnum(['form', 'list', 'rules', 'link', 'phone'])
   optionType: OptionType;
 
   @ApiPropertyOptional({
-    description: 'JSON: form={ issueImage: "none"|"optional"|"required" }, list={ listKey }, rules={ content|rules[] }, link={ url }',
+    description: 'JSON: form={ issueImage: "none"|"optional"|"required" }, list={ listKey }, rules={ content|rules[] }, link={ url }, phone={ phoneNumber }',
   })
   @IsOptional()
   @IsObject()

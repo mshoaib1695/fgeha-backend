@@ -8,16 +8,17 @@ import {
 } from 'typeorm';
 import { RequestTypeEntity } from '../../request-types/entities/request-type.entity';
 
-export type OptionType = 'form' | 'list' | 'rules' | 'link';
+export type OptionType = 'form' | 'list' | 'rules' | 'link' | 'phone';
 export type FormIssueImageRequirement = 'none' | 'optional' | 'required';
 
-/** Config JSON by option_type: form={}, list={ listKey: 'daily_bulletin'|'requests'|'news' }, rules={ content: string }, link={ url: string } */
+/** Config JSON by option_type: form={}, list={ listKey: 'daily_bulletin'|'requests'|'news' }, rules={ content: string }, link={ url: string }, phone={ phoneNumber: string } */
 export interface RequestTypeOptionConfig {
   issueImage?: FormIssueImageRequirement;
   listKey?: string;
   content?: string;
   rules?: Array<{ description?: string }>;
   url?: string;
+  phoneNumber?: string;
 }
 
 @Entity('request_type_options')
@@ -38,7 +39,7 @@ export class RequestTypeOptionEntity {
   @Column({ name: 'option_type', type: 'varchar', length: 20 })
   optionType: OptionType;
 
-  /** JSON: form={}, list={ listKey }, rules={ content }, link={ url } */
+  /** JSON: form={}, list={ listKey }, rules={ content }, link={ url }, phone={ phoneNumber } */
   @Column({ type: 'json', nullable: true })
   config: RequestTypeOptionConfig | null;
 

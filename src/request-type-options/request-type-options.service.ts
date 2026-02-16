@@ -54,6 +54,12 @@ export class RequestTypeOptionsService {
     if (optionType === 'link') {
       return { url: typeof cfg.url === 'string' ? cfg.url : undefined };
     }
+    if (optionType === 'phone') {
+      return {
+        phoneNumber:
+          typeof cfg.phoneNumber === 'string' ? cfg.phoneNumber.trim() : undefined,
+      };
+    }
     return null;
   }
 
