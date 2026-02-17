@@ -19,18 +19,6 @@ export class RequestTypeEntity {
   @Column({ name: 'display_order', default: 0 })
   displayOrder: number;
 
-  /** Request number prefix, e.g. WTR -> WTR#0001. Configurable per request type. */
-  @Column({ name: 'request_number_prefix', type: 'varchar', length: 20, nullable: true })
-  requestNumberPrefix: string | null;
-
-  /** Zero-padding length for request number suffix (e.g. 4 -> 0001). */
-  @Column({ name: 'request_number_padding', type: 'int', default: 4 })
-  requestNumberPadding: number;
-
-  /** Next sequence number to allocate for this request type. */
-  @Column({ name: 'request_number_next', type: 'int', default: 1 })
-  requestNumberNext: number;
-
   /** Optional: icon/image URL for app home (e.g. /request-type-icons/water.svg or full URL). */
   @Column({ name: 'icon_url', type: 'varchar', length: 500, nullable: true })
   iconUrl: string | null;

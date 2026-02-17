@@ -34,4 +34,13 @@ export class CreateRequestTypeOptionDto {
   @IsString()
   @MaxLength(500)
   imageUrl?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Request ID prefix for this service option (e.g. OWT -> OWT#0001)',
+    maxLength: 20,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  requestNumberPrefix?: string | null;
 }

@@ -6,9 +6,11 @@ import {
   ManyToOne,
   JoinColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { RequestTypeEntity } from '../../request-types/entities/request-type.entity';
+import { RequestTypeOptionEntity } from '../../request-type-options/entities/request-type-option.entity';
 
 export enum RequestStatus {
   PENDING = 'pending',
@@ -30,6 +32,14 @@ export class Request {
   @ManyToOne(() => RequestTypeEntity, (type) => type.requests, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'request_type_id' })
   requestType: RequestTypeEntity;
+
+  @Index('idx_requests_request_type_option_id')
+  @Column({ name: 'request_type_option_id', nullable: true })
+  requestTypeOptionId: number | null;
+
+  @ManyToOne(() => RequestTypeOptionEntity, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'request_type_option_id' })
+  requestTypeOption: RequestTypeOptionEntity | null;
 
   /** Human-friendly request number, e.g. WTR#0001. Legacy rows may be null. */
   @Column({ name: 'request_number', type: 'varchar', length: 40, nullable: true })

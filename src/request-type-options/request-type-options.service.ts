@@ -12,6 +12,11 @@ const IMAGE_DIR = 'request-type-option-images';
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB
 const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
+function deriveDefaultOptionPrefix(label: string): string {
+  const seed = (label || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return seed.slice(0, 6) || 'SRV';
+}
+
 @Injectable()
 export class RequestTypeOptionsService {
   constructor(
@@ -110,6 +115,7 @@ export class RequestTypeOptionsService {
   /** Admin: create option. */
   async create(dto: CreateRequestTypeOptionDto, user: User): Promise<RequestTypeOptionEntity> {
     if (user.role !== UserRole.ADMIN) throw new ForbiddenException('Admin only');
+    const prefix = dto.requestNumberPrefix?.trim().toUpperCase() || deriveDefaultOptionPrefix(dto.label);
     const option = this.repo.create({
       requestTypeId: dto.requestTypeId,
       label: dto.label,
@@ -117,6 +123,9 @@ export class RequestTypeOptionsService {
       config: this.normalizeConfig(dto.optionType, dto.config ?? null),
       displayOrder: dto.displayOrder ?? 0,
       imageUrl: dto.imageUrl ?? null,
+      requestNumberPrefix: prefix,
+      requestNumberPadding: 4,
+      requestNumberNext: 1,
     });
     return this.repo.save(option);
   }
@@ -133,6 +142,19 @@ export class RequestTypeOptionsService {
     }
     if (dto.displayOrder != null) option.displayOrder = dto.displayOrder;
     if (dto.imageUrl !== undefined) option.imageUrl = dto.imageUrl;
+    if (dto.requestNumberPrefix !== undefined) {
+      const normalized = dto.requestNumberPrefix?.trim().toUpperCase() ?? '';
+      option.requestNumberPrefix = normalized || deriveDefaultOptionPrefix(option.label);
+    }
+    if (!option.requestNumberPrefix?.trim()) {
+      option.requestNumberPrefix = deriveDefaultOptionPrefix(option.label);
+    }
+    if (!option.requestNumberPadding || option.requestNumberPadding < 1) {
+      option.requestNumberPadding = 4;
+    }
+    if (!option.requestNumberNext || option.requestNumberNext < 1) {
+      option.requestNumberNext = 1;
+    }
     return this.repo.save(option);
   }
 

@@ -39,6 +39,18 @@ export class RequestTypeOptionEntity {
   @Column({ name: 'option_type', type: 'varchar', length: 20 })
   optionType: OptionType;
 
+  /** Request number prefix for this service option (e.g. OWT -> OWT#0001). */
+  @Column({ name: 'request_number_prefix', type: 'varchar', length: 20, nullable: true })
+  requestNumberPrefix: string | null;
+
+  /** Zero-padding length for request number suffix (e.g. 4 -> 0001). */
+  @Column({ name: 'request_number_padding', type: 'int', default: 4 })
+  requestNumberPadding: number;
+
+  /** Next sequence number to allocate for this service option. */
+  @Column({ name: 'request_number_next', type: 'int', default: 1 })
+  requestNumberNext: number;
+
   /** JSON: form={}, list={ listKey }, rules={ content }, link={ url }, phone={ phoneNumber } */
   @Column({ type: 'json', nullable: true })
   config: RequestTypeOptionConfig | null;

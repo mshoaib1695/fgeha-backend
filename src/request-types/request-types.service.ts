@@ -28,11 +28,6 @@ const DEFAULT_TYPES: { name: string; slug: string; displayOrder: number }[] = [
   { name: 'Other', slug: 'other', displayOrder: 6 },
 ];
 
-function deriveDefaultPrefix(name?: string, slug?: string): string {
-  const source = (name || slug || 'REQ').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  return source.slice(0, 3) || 'REQ';
-}
-
 @Injectable()
 export class RequestTypesService implements OnModuleInit {
   constructor(
@@ -87,9 +82,6 @@ export class RequestTypesService implements OnModuleInit {
     const entity = this.repo.create({
       ...dto,
       displayOrder: dto.displayOrder ?? 0,
-      requestNumberPrefix: deriveDefaultPrefix(dto.name, dto.slug),
-      requestNumberPadding: 4,
-      requestNumberNext: 1,
     });
     return this.repo.save(entity);
   }
@@ -117,23 +109,7 @@ export class RequestTypesService implements OnModuleInit {
       const existing = await this.repo.findOne({ where: { slug: dto.slug } });
       if (existing && existing.id !== id) throw new ConflictException('Slug already exists');
     }
-    if (dto.requestNumberPrefix != null) {
-      dto.requestNumberPrefix = dto.requestNumberPrefix.trim().toUpperCase();
-      if (!dto.requestNumberPrefix) {
-        dto.requestNumberPrefix = null;
-      }
-    }
     Object.assign(entity, dto);
-    // Numbering config is backend-managed only.
-    if (!entity.requestNumberPrefix?.trim()) {
-      entity.requestNumberPrefix = deriveDefaultPrefix(entity.name, entity.slug);
-    }
-    if (!entity.requestNumberPadding || entity.requestNumberPadding < 1) {
-      entity.requestNumberPadding = 4;
-    }
-    if (!entity.requestNumberNext || entity.requestNumberNext < 1) {
-      entity.requestNumberNext = 1;
-    }
     return this.repo.save(entity);
   }
 

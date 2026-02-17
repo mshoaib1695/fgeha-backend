@@ -11,6 +11,13 @@ export class FindRequestsQueryDto {
   @Min(1)
   requestTypeId?: number;
 
+  @ApiPropertyOptional({ description: 'Filter by service option ID' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  requestTypeOptionId?: number;
+
   @ApiPropertyOptional({ enum: RequestStatus, description: 'Filter by status' })
   @IsOptional()
   @IsEnum(RequestStatus)

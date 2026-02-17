@@ -72,6 +72,13 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
+  @Patch('me/deactivate')
+  deactivateMe(@CurrentUser() user: User) {
+    return this.usersService.deactivateMe(user as User);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: User) {
     return this.usersService.findOne(+id, user as User);

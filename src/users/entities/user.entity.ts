@@ -21,6 +21,11 @@ export enum ApprovalStatus {
   REJECTED = 'rejected',
 }
 
+export enum AccountStatus {
+  ACTIVE = 'active',
+  DEACTIVATED = 'deactivated',
+}
+
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
@@ -76,6 +81,13 @@ export class User {
     default: ApprovalStatus.APPROVED,
   })
   approvalStatus: ApprovalStatus;
+
+  @Column({
+    type: 'enum',
+    enum: AccountStatus,
+    default: AccountStatus.ACTIVE,
+  })
+  accountStatus: AccountStatus;
 
   @CreateDateColumn()
   createdAt: Date;

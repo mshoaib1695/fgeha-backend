@@ -12,7 +12,7 @@ import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { User, UserRole, ApprovalStatus } from './entities/user.entity';
+import { User, UserRole, ApprovalStatus, AccountStatus } from './entities/user.entity';
 import { SubSector } from './entities/sub-sector.entity';
 import { Request } from '../requests/entities/request.entity';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -107,6 +107,7 @@ export class UsersService implements OnModuleInit {
       subSectorId: subSector.id,
       role: UserRole.ADMIN,
       approvalStatus: ApprovalStatus.APPROVED,
+      accountStatus: AccountStatus.ACTIVE,
     });
     await this.userRepo.save(admin);
   }
@@ -151,6 +152,7 @@ export class UsersService implements OnModuleInit {
       password: hashed,
       role: UserRole.USER,
       approvalStatus: ApprovalStatus.APPROVED,
+      accountStatus: AccountStatus.ACTIVE,
       idCardFront: idCardFrontPath,
       idCardBack: idCardBackPath,
     });
@@ -234,6 +236,15 @@ export class UsersService implements OnModuleInit {
     if (dto.profileImage !== undefined && dto.profileImage.trim()) {
       user.profileImage = this.saveProfileImage(dto.profileImage.trim());
     }
+    const saved = await this.userRepo.save(user);
+    const { password: _, ...rest } = saved;
+    return rest;
+  }
+
+  async deactivateMe(currentUser: User): Promise<Omit<User, 'password'>> {
+    const user = await this.userRepo.findOne({ where: { id: currentUser.id } });
+    if (!user) throw new NotFoundException('User not found');
+    user.accountStatus = AccountStatus.DEACTIVATED;
     const saved = await this.userRepo.save(user);
     const { password: _, ...rest } = saved;
     return rest;

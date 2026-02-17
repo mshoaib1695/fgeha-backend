@@ -174,11 +174,13 @@ function parseHHmm(s: string): { h: number; m: number } {
   return { h: h ?? 0, m: m ?? 0 };
 }
 
-function deriveRequestNumberPrefix(type: Pick<RequestTypeEntity, 'slug' | 'name' | 'requestNumberPrefix'>): string {
-  const configured = type.requestNumberPrefix?.trim();
+function deriveOptionRequestNumberPrefix(
+  option: Pick<RequestTypeOptionEntity, 'label' | 'requestNumberPrefix'>,
+): string {
+  const configured = option.requestNumberPrefix?.trim();
   if (configured) return configured.toUpperCase();
-  const seed = (type.slug || type.name || 'REQ').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  return (seed.slice(0, 3) || 'REQ');
+  const seed = (option.label || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return seed.slice(0, 6) || 'SRV';
 }
 
 function formatRequestNumber(prefix: string, num: number, padding: number): string {
@@ -308,23 +310,21 @@ export class RequestsService {
       throw new ConflictException('Invalid sub sector');
 
     let issueImageRequirement: 'none' | 'optional' | 'required' = 'none';
-    if (createRequestDto.requestTypeOptionId != null) {
-      const selectedOption = await this.requestTypeOptionRepo.findOne({
-        where: {
-          id: createRequestDto.requestTypeOptionId,
-          requestTypeId: createRequestDto.requestTypeId,
-        },
-      });
-      if (!selectedOption) {
-        throw new ConflictException('Invalid service option selected');
-      }
-      if (selectedOption.optionType === 'form') {
-        const cfgRequirement = selectedOption.config?.issueImage;
-        issueImageRequirement =
-          cfgRequirement === 'none' || cfgRequirement === 'optional' || cfgRequirement === 'required'
-            ? cfgRequirement
-            : 'optional';
-      }
+    const selectedOption = await this.requestTypeOptionRepo.findOne({
+      where: {
+        id: createRequestDto.requestTypeOptionId,
+        requestTypeId: createRequestDto.requestTypeId,
+      },
+    });
+    if (!selectedOption) {
+      throw new ConflictException('Invalid service option selected');
+    }
+    if (selectedOption.optionType === 'form') {
+      const cfgRequirement = selectedOption.config?.issueImage;
+      issueImageRequirement =
+        cfgRequirement === 'none' || cfgRequirement === 'optional' || cfgRequirement === 'required'
+          ? cfgRequirement
+          : 'optional';
     }
     if (issueImageRequirement === 'required' && !issueImage) {
       throw new ConflictException('Please upload an issue image for this service');
@@ -339,15 +339,19 @@ export class RequestsService {
         .andWhere('r.house_no = :houseNo', { houseNo: createRequestDto.houseNo.trim() })
         .andWhere('r.street_no = :streetNo', { streetNo: createRequestDto.streetNo.trim() })
         .andWhere('r.sub_sector_id = :subSectorId', { subSectorId: createRequestDto.subSectorId });
+      qb.andWhere('r.request_type_option_id = :requestTypeOptionId', {
+        requestTypeOptionId: createRequestDto.requestTypeOptionId,
+      });
       addCalendarPeriodCondition(qb, period, new Date());
       const count = await qb.getCount();
       if (count > 0) {
         const periodLabel = period === 'day' ? 'calendar day' : period === 'week' ? 'calendar week' : 'calendar month';
+        const scopeName = selectedOption?.label?.trim() || requestType.name;
         this.logger.warn(
-          `[Request create] REJECTED duplicate userId=${user.id} requestTypeName="${requestType.name}" period=${periodLabel}`,
+          `[Request create] REJECTED duplicate userId=${user.id} scope="${scopeName}" period=${periodLabel}`,
         );
         throw new ForbiddenException(
-          `Only one ${requestType.name} request per ${periodLabel} is allowed for the same house, street and sector. There is already a request for this address in this ${periodLabel}.`,
+          `Only one ${scopeName} request per ${periodLabel} is allowed for the same house, street and sector. There is already a request for this address in this ${periodLabel}.`,
         );
       }
     }
@@ -355,8 +359,8 @@ export class RequestsService {
     const description = (createRequestDto.description ?? '').trim();
     const saved = await this.requestRepo.manager.transaction(async (manager) => {
       const requestTypeRepo = manager.getRepository(RequestTypeEntity);
+      const requestTypeOptionRepo = manager.getRepository(RequestTypeOptionEntity);
       const requestRepo = manager.getRepository(RequestEntity);
-
       const lockedType = await requestTypeRepo.findOne({
         where: { id: createRequestDto.requestTypeId },
         lock: { mode: 'pessimistic_write' },
@@ -364,11 +368,20 @@ export class RequestsService {
       if (!lockedType) {
         throw new ForbiddenException('Invalid request type');
       }
-
-      const prefix = deriveRequestNumberPrefix(lockedType);
-      const rawPadding = lockedType.requestNumberPadding ?? 4;
+      const lockedOption = await requestTypeOptionRepo.findOne({
+        where: {
+          id: createRequestDto.requestTypeOptionId,
+          requestTypeId: createRequestDto.requestTypeId,
+        },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!lockedOption) {
+        throw new ForbiddenException('Invalid service option selected');
+      }
+      const prefix = deriveOptionRequestNumberPrefix(lockedOption);
+      const rawPadding = lockedOption.requestNumberPadding ?? 4;
       const padding = Math.max(1, Math.min(12, rawPadding));
-      let seq = lockedType.requestNumberNext ?? 1;
+      let seq = lockedOption.requestNumberNext ?? 1;
       if (seq < 1) seq = 1;
 
       let requestNumber = formatRequestNumber(prefix, seq, padding);
@@ -378,11 +391,12 @@ export class RequestsService {
         requestNumber = formatRequestNumber(prefix, seq, padding);
       }
 
-      lockedType.requestNumberNext = seq + 1;
-      await requestTypeRepo.save(lockedType);
+      lockedOption.requestNumberNext = seq + 1;
+      await requestTypeOptionRepo.save(lockedOption);
 
       const request = requestRepo.create({
         requestTypeId: createRequestDto.requestTypeId,
+        requestTypeOptionId: createRequestDto.requestTypeOptionId,
         requestNumber,
         description: description || '',
         issueImageUrl,
@@ -404,7 +418,7 @@ export class RequestsService {
     return this.requestRepo.find({
       where: { userId },
       order: { createdAt: 'DESC' },
-      relations: ['user', 'requestType'],
+      relations: ['user', 'requestType', 'requestTypeOption'],
     });
   }
 
@@ -418,9 +432,15 @@ export class RequestsService {
       .createQueryBuilder('r')
       .leftJoinAndSelect('r.user', 'user')
       .leftJoinAndSelect('r.requestType', 'requestType')
+      .leftJoinAndSelect('r.requestTypeOption', 'requestTypeOption')
       .orderBy('r.createdAt', 'DESC');
     if (query.requestTypeId != null) {
       qb.andWhere('r.request_type_id = :requestTypeId', { requestTypeId: query.requestTypeId });
+    }
+    if (query.requestTypeOptionId != null) {
+      qb.andWhere('r.request_type_option_id = :requestTypeOptionId', {
+        requestTypeOptionId: query.requestTypeOptionId,
+      });
     }
     if (query.status) {
       if (query.status === RequestStatus.COMPLETED) {
@@ -450,7 +470,7 @@ export class RequestsService {
   async findOne(id: number, user: User): Promise<RequestEntity> {
     const request = await this.requestRepo.findOne({
       where: { id },
-      relations: ['user', 'requestType'],
+      relations: ['user', 'requestType', 'requestTypeOption'],
     });
     if (!request) throw new NotFoundException('Request not found');
     if (user.role !== UserRole.ADMIN && request.userId !== user.id)
@@ -493,6 +513,20 @@ export class RequestsService {
         throw new ConflictException('Invalid request type');
       }
       request.requestTypeId = dto.requestTypeId;
+    }
+
+    if (dto.requestTypeOptionId !== undefined) {
+      if (dto.requestTypeOptionId == null) {
+        request.requestTypeOptionId = null;
+      } else {
+        const option = await this.requestTypeOptionRepo.findOne({
+          where: { id: dto.requestTypeOptionId, requestTypeId: request.requestTypeId },
+        });
+        if (!option) {
+          throw new ConflictException('Invalid service option');
+        }
+        request.requestTypeOptionId = dto.requestTypeOptionId;
+      }
     }
 
     if (dto.subSectorId != null) {
