@@ -13,7 +13,9 @@ SET @has_prefix := (
     AND COLUMN_NAME = 'request_number_prefix'
 );
 SET @sql := IF(@has_prefix > 0, 'ALTER TABLE `request_types` DROP COLUMN `request_number_prefix`', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 SET @has_padding := (
   SELECT COUNT(*)
@@ -23,7 +25,9 @@ SET @has_padding := (
     AND COLUMN_NAME = 'request_number_padding'
 );
 SET @sql := IF(@has_padding > 0, 'ALTER TABLE `request_types` DROP COLUMN `request_number_padding`', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 SET @has_next := (
   SELECT COUNT(*)
@@ -33,6 +37,8 @@ SET @has_next := (
     AND COLUMN_NAME = 'request_number_next'
 );
 SET @sql := IF(@has_next > 0, 'ALTER TABLE `request_types` DROP COLUMN `request_number_next`', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 COMMIT;
