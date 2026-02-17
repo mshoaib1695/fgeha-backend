@@ -95,6 +95,19 @@ export class RequestsController {
     return this.requestsService.getDailyStats(user as User, parsedDays);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth('JWT')
+  @Get('stats/reports')
+  getDashboardReports(
+    @CurrentUser() user: User,
+    @Query('period') period?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.requestsService.getDashboardReports(user as User, period, from, to);
+  }
+
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
   @Get(':id')

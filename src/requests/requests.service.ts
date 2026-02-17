@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThanOrEqual, Repository, SelectQueryBuilder } from 'typeorm';
+import { Brackets, MoreThanOrEqual, Repository, SelectQueryBuilder } from 'typeorm';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { Request as RequestEntity, RequestStatus } from './entities/request.entity';
@@ -174,6 +174,8 @@ function parseHHmm(s: string): { h: number; m: number } {
   return { h: h ?? 0, m: m ?? 0 };
 }
 
+type ReportsPeriod = 'today' | 'week' | 'month' | 'custom';
+
 function deriveOptionRequestNumberPrefix(
   option: Pick<RequestTypeOptionEntity, 'label' | 'requestNumberPrefix'>,
 ): string {
@@ -238,7 +240,81 @@ export class RequestsService {
     private readonly requestTypeOptionRepo: Repository<RequestTypeOptionEntity>,
     @InjectRepository(SubSector)
     private readonly subSectorRepo: Repository<SubSector>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
   ) {}
+
+  private resolveReportsDateRange(
+    periodRaw?: string,
+    fromRaw?: string,
+    toRaw?: string,
+  ): { period: ReportsPeriod; start: Date; endExclusive: Date; from: string; to: string } {
+    const period = (periodRaw ?? 'month').toLowerCase() as ReportsPeriod;
+    const now = new Date();
+    const start = new Date(now);
+    start.setUTCHours(0, 0, 0, 0);
+    const endExclusive = new Date(start);
+    endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+
+    const isValidDateString = (value?: string): value is string =>
+      typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+    const parseDateString = (value: string): Date => new Date(`${value}T00:00:00.000Z`);
+    const toDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
+
+    if (period === 'today') {
+      return {
+        period,
+        start,
+        endExclusive,
+        from: toDateOnly(start),
+        to: toDateOnly(start),
+      };
+    }
+
+    if (period === 'week') {
+      const day = start.getUTCDay();
+      const diffToMonday = day === 0 ? 6 : day - 1;
+      start.setUTCDate(start.getUTCDate() - diffToMonday);
+      endExclusive.setTime(start.getTime());
+      endExclusive.setUTCDate(endExclusive.getUTCDate() + 7);
+      return {
+        period,
+        start,
+        endExclusive,
+        from: toDateOnly(start),
+        to: toDateOnly(new Date(endExclusive.getTime() - 86400000)),
+      };
+    }
+
+    if (period === 'custom' && isValidDateString(fromRaw) && isValidDateString(toRaw)) {
+      const customFrom = parseDateString(fromRaw);
+      const customTo = parseDateString(toRaw);
+      const rangeStart = customFrom <= customTo ? customFrom : customTo;
+      const rangeEnd = customFrom <= customTo ? customTo : customFrom;
+      const customEndExclusive = new Date(rangeEnd);
+      customEndExclusive.setUTCDate(customEndExclusive.getUTCDate() + 1);
+      return {
+        period,
+        start: rangeStart,
+        endExclusive: customEndExclusive,
+        from: toDateOnly(rangeStart),
+        to: toDateOnly(rangeEnd),
+      };
+    }
+
+    // Default month range (or invalid custom input fallback).
+    start.setUTCDate(1);
+    endExclusive.setUTCFullYear(start.getUTCFullYear());
+    endExclusive.setUTCMonth(start.getUTCMonth() + 1, 1);
+    endExclusive.setUTCHours(0, 0, 0, 0);
+    return {
+      period: 'month',
+      start,
+      endExclusive,
+      from: toDateOnly(start),
+      to: toDateOnly(new Date(endExclusive.getTime() - 86400000)),
+    };
+  }
 
   private saveRequestImage(file: { buffer: Buffer; originalname: string; mimetype: string }): string {
     if (file.buffer.length > MAX_REQUEST_IMAGE_SIZE) {
@@ -633,5 +709,618 @@ export class RequestsService {
       date,
       count,
     }));
+  }
+
+  async getDashboardReports(
+    user: User,
+    periodRaw?: string,
+    fromRaw?: string,
+    toRaw?: string,
+  ): Promise<{
+    filter: { period: ReportsPeriod; from: string; to: string };
+    usersBySubSectorHouse: Array<{
+      subSectorId: number;
+      subSectorName: string;
+      houseNo: string;
+      userName: string;
+      cnicNo: string | null;
+      mobileNo: string;
+      usersInHouse: number;
+    }>;
+    requestsPerHouseDateStatus: Array<{
+      subSectorId: number;
+      subSectorName: string;
+      houseNo: string;
+      streetNo: string;
+      date: string;
+      status: string;
+      requestCount: number;
+    }>;
+    usersSummary: {
+      totalUsers: number;
+      bySubSector: Array<{ subSectorId: number; subSectorName: string; usersCount: number }>;
+    };
+    requestsSummary: {
+      totalRequests: number;
+      bySubSector: Array<{ subSectorId: number; subSectorName: string; requestsCount: number }>;
+      byStatus: Array<{ status: string; requestsCount: number }>;
+    };
+    tankerSummary: {
+      requested: number;
+      delivered: number;
+      pending: number;
+      cancelled: number;
+      bySubSector: Array<{
+        subSectorId: number;
+        subSectorName: string;
+        requested: number;
+        delivered: number;
+        pending: number;
+      }>;
+    };
+    insights: {
+      completionRate: number;
+      cancellationRate: number;
+      backlogCount: number;
+      avgResolutionHours: number;
+      requestsGrowthPercent: number;
+      usersGrowthPercent: number;
+      topSubSectorByRequests: { subSectorId: number; subSectorName: string; requestsCount: number } | null;
+      topSubSectorByUsers: { subSectorId: number; subSectorName: string; usersCount: number } | null;
+    };
+    analytics: {
+      dailyTrend: Array<{ date: string; total: number; completed: number; pending: number }>;
+      topRequestTypes: Array<{ requestTypeName: string; requestTypeSlug: string; requestsCount: number }>;
+      topServiceOptions: Array<{ serviceOptionLabel: string; requestsCount: number }>;
+      topHouses: Array<{
+        subSectorName: string;
+        houseNo: string;
+        streetNo: string;
+        totalRequests: number;
+        pendingRequests: number;
+      }>;
+      subSectorPerformance: Array<{
+        subSectorId: number;
+        subSectorName: string;
+        usersCount: number;
+        requestsCount: number;
+        completedCount: number;
+        completionRate: number;
+      }>;
+      statusMixBySubSector: Array<{
+        subSectorId: number;
+        subSectorName: string;
+        totalRequests: number;
+        pendingCount: number;
+        inProgressCount: number;
+        completedCount: number;
+        cancelledCount: number;
+        completionRate: number;
+      }>;
+      agingBuckets: Array<{ bucket: string; count: number }>;
+      repeatDemandHouses: Array<{
+        subSectorName: string;
+        houseNo: string;
+        streetNo: string;
+        totalRequests: number;
+      }>;
+      hourlyDemand: Array<{ hour: number; count: number }>;
+    };
+  }> {
+    if (user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin only');
+    }
+
+    const range = this.resolveReportsDateRange(periodRaw, fromRaw, toRaw);
+    const dateParams = { start: range.start, endExclusive: range.endExclusive };
+    const periodMs = range.endExclusive.getTime() - range.start.getTime();
+    const previousRangeStart = new Date(range.start.getTime() - periodMs);
+    const previousRangeEnd = new Date(range.endExclusive.getTime() - periodMs);
+
+    const houseCountsRows = await this.userRepo
+      .createQueryBuilder('u')
+      .select('u.sub_sector_id', 'subSectorId')
+      .addSelect('u.house_no', 'houseNo')
+      .addSelect('COUNT(*)', 'usersInHouse')
+      .where('u.createdAt >= :start AND u.createdAt < :endExclusive', dateParams)
+      .groupBy('u.sub_sector_id')
+      .addGroupBy('u.house_no')
+      .getRawMany<{
+        subSectorId: string;
+        houseNo: string;
+        usersInHouse: string;
+      }>();
+    const usersInHouseMap = new Map<string, number>();
+    for (const row of houseCountsRows) {
+      usersInHouseMap.set(
+        `${row.subSectorId}::${row.houseNo}`,
+        Number(row.usersInHouse) || 0,
+      );
+    }
+
+    const usersBySubSectorHouseRaw = await this.userRepo
+      .createQueryBuilder('u')
+      .leftJoin('u.subSector', 'ss')
+      .select('u.sub_sector_id', 'subSectorId')
+      .addSelect('COALESCE(ss.name, "N/A")', 'subSectorName')
+      .addSelect('u.house_no', 'houseNo')
+      .addSelect('u.full_name', 'userName')
+      .addSelect('NULL', 'cnicNo')
+      .addSelect('CONCAT(COALESCE(u.phone_country_code, ""), " ", COALESCE(u.phone_number, ""))', 'mobileNo')
+      .where('u.createdAt >= :start AND u.createdAt < :endExclusive', dateParams)
+      .orderBy('ss.name', 'ASC')
+      .addOrderBy('u.house_no', 'ASC')
+      .addOrderBy('u.full_name', 'ASC')
+      .getRawMany<{
+        subSectorId: string;
+        subSectorName: string;
+        houseNo: string;
+        userName: string;
+        cnicNo: string | null;
+        mobileNo: string;
+      }>();
+    const usersBySubSectorHouse = usersBySubSectorHouseRaw.map((row) => {
+      const key = `${row.subSectorId}::${row.houseNo}`;
+      return {
+        subSectorId: Number(row.subSectorId) || 0,
+        subSectorName: row.subSectorName,
+        houseNo: row.houseNo,
+        userName: row.userName,
+        cnicNo: row.cnicNo,
+        mobileNo: (row.mobileNo ?? '').trim(),
+        usersInHouse: usersInHouseMap.get(key) ?? 0,
+      };
+    });
+
+    const requestsPerHouseDateStatusRaw = await this.requestRepo
+      .createQueryBuilder('r')
+      .leftJoin(SubSector, 'ss', 'ss.id = r.sub_sector_id')
+      .select('r.sub_sector_id', 'subSectorId')
+      .addSelect('COALESCE(ss.name, "N/A")', 'subSectorName')
+      .addSelect('r.house_no', 'houseNo')
+      .addSelect('r.street_no', 'streetNo')
+      .addSelect('DATE(r.createdAt)', 'date')
+      .addSelect('r.status', 'status')
+      .addSelect('COUNT(*)', 'requestCount')
+      .where('r.createdAt >= :start AND r.createdAt < :endExclusive', dateParams)
+      .groupBy('r.sub_sector_id')
+      .addGroupBy('ss.name')
+      .addGroupBy('r.house_no')
+      .addGroupBy('r.street_no')
+      .addGroupBy('DATE(r.createdAt)')
+      .addGroupBy('r.status')
+      .orderBy('DATE(r.createdAt)', 'DESC')
+      .addOrderBy('ss.name', 'ASC')
+      .addOrderBy('r.house_no', 'ASC')
+      .getRawMany<{
+        subSectorId: string;
+        subSectorName: string;
+        houseNo: string;
+        streetNo: string;
+        date: string;
+        status: string;
+        requestCount: string;
+      }>();
+    const requestsPerHouseDateStatus = requestsPerHouseDateStatusRaw.map((row) => ({
+      subSectorId: Number(row.subSectorId) || 0,
+      subSectorName: row.subSectorName,
+      houseNo: row.houseNo,
+      streetNo: row.streetNo,
+      date: row.date,
+      status: row.status,
+      requestCount: Number(row.requestCount) || 0,
+    }));
+
+    const usersSummaryBySubSectorRaw = await this.userRepo
+      .createQueryBuilder('u')
+      .leftJoin('u.subSector', 'ss')
+      .select('u.sub_sector_id', 'subSectorId')
+      .addSelect('COALESCE(ss.name, "N/A")', 'subSectorName')
+      .addSelect('COUNT(*)', 'usersCount')
+      .where('u.createdAt >= :start AND u.createdAt < :endExclusive', dateParams)
+      .groupBy('u.sub_sector_id')
+      .addGroupBy('ss.name')
+      .orderBy('ss.name', 'ASC')
+      .getRawMany<{ subSectorId: string; subSectorName: string; usersCount: string }>();
+    const usersSummary = {
+      totalUsers: usersSummaryBySubSectorRaw.reduce(
+        (acc, row) => acc + (Number(row.usersCount) || 0),
+        0,
+      ),
+      bySubSector: usersSummaryBySubSectorRaw.map((row) => ({
+        subSectorId: Number(row.subSectorId) || 0,
+        subSectorName: row.subSectorName,
+        usersCount: Number(row.usersCount) || 0,
+      })),
+    };
+
+    const requestsSummaryBySubSectorRaw = await this.requestRepo
+      .createQueryBuilder('r')
+      .leftJoin(SubSector, 'ss', 'ss.id = r.sub_sector_id')
+      .select('r.sub_sector_id', 'subSectorId')
+      .addSelect('COALESCE(ss.name, "N/A")', 'subSectorName')
+      .addSelect('COUNT(*)', 'requestsCount')
+      .where('r.createdAt >= :start AND r.createdAt < :endExclusive', dateParams)
+      .groupBy('r.sub_sector_id')
+      .addGroupBy('ss.name')
+      .orderBy('ss.name', 'ASC')
+      .getRawMany<{ subSectorId: string; subSectorName: string; requestsCount: string }>();
+    const requestsSummaryByStatusRaw = await this.requestRepo
+      .createQueryBuilder('r')
+      .select('r.status', 'status')
+      .addSelect('COUNT(*)', 'requestsCount')
+      .where('r.createdAt >= :start AND r.createdAt < :endExclusive', dateParams)
+      .groupBy('r.status')
+      .orderBy('r.status', 'ASC')
+      .getRawMany<{ status: string; requestsCount: string }>();
+    const requestsSummary = {
+      totalRequests: requestsSummaryBySubSectorRaw.reduce(
+        (acc, row) => acc + (Number(row.requestsCount) || 0),
+        0,
+      ),
+      bySubSector: requestsSummaryBySubSectorRaw.map((row) => ({
+        subSectorId: Number(row.subSectorId) || 0,
+        subSectorName: row.subSectorName,
+        requestsCount: Number(row.requestsCount) || 0,
+      })),
+      byStatus: requestsSummaryByStatusRaw.map((row) => ({
+        status: row.status,
+        requestsCount: Number(row.requestsCount) || 0,
+      })),
+    };
+
+    const tankerBaseQb = this.requestRepo
+      .createQueryBuilder('r')
+      .leftJoin('r.requestType', 'rt')
+      .leftJoin('r.requestTypeOption', 'rto')
+      .where('r.createdAt >= :start AND r.createdAt < :endExclusive', dateParams)
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('LOWER(rt.slug) LIKE :tanker', { tanker: '%tanker%' })
+            .orWhere('LOWER(rt.name) LIKE :tanker', { tanker: '%tanker%' })
+            .orWhere('LOWER(rto.label) LIKE :tanker', { tanker: '%tanker%' });
+        }),
+      );
+    const tankerCountsRaw = await tankerBaseQb
+      .clone()
+      .select('COUNT(*)', 'requested')
+      .addSelect(
+        'SUM(CASE WHEN r.status IN (:...deliveredStatuses) THEN 1 ELSE 0 END)',
+        'delivered',
+      )
+      .addSelect('SUM(CASE WHEN r.status = :cancelled THEN 1 ELSE 0 END)', 'cancelled')
+      .setParameters({
+        deliveredStatuses: [RequestStatus.COMPLETED, RequestStatus.DONE],
+        cancelled: RequestStatus.CANCELLED,
+      })
+      .getRawOne<{ requested: string; delivered: string; cancelled: string }>();
+    const requested = Number(tankerCountsRaw?.requested ?? 0);
+    const delivered = Number(tankerCountsRaw?.delivered ?? 0);
+    const cancelled = Number(tankerCountsRaw?.cancelled ?? 0);
+
+    const tankerBySubSectorRaw = await tankerBaseQb
+      .clone()
+      .leftJoin(SubSector, 'ss', 'ss.id = r.sub_sector_id')
+      .select('r.sub_sector_id', 'subSectorId')
+      .addSelect('COALESCE(ss.name, "N/A")', 'subSectorName')
+      .addSelect('COUNT(*)', 'requested')
+      .addSelect(
+        'SUM(CASE WHEN r.status IN (:...deliveredStatuses) THEN 1 ELSE 0 END)',
+        'delivered',
+      )
+      .groupBy('r.sub_sector_id')
+      .addGroupBy('ss.name')
+      .orderBy('ss.name', 'ASC')
+      .setParameters({
+        deliveredStatuses: [RequestStatus.COMPLETED, RequestStatus.DONE],
+      })
+      .getRawMany<{
+        subSectorId: string;
+        subSectorName: string;
+        requested: string;
+        delivered: string;
+      }>();
+    const tankerSummary = {
+      requested,
+      delivered,
+      pending: Math.max(0, requested - delivered - cancelled),
+      cancelled,
+      bySubSector: tankerBySubSectorRaw.map((row) => {
+        const rowRequested = Number(row.requested) || 0;
+        const rowDelivered = Number(row.delivered) || 0;
+        return {
+          subSectorId: Number(row.subSectorId) || 0,
+          subSectorName: row.subSectorName,
+          requested: rowRequested,
+          delivered: rowDelivered,
+          pending: Math.max(0, rowRequested - rowDelivered),
+        };
+      }),
+    };
+
+    const requestAnalyticsRows = await this.requestRepo
+      .createQueryBuilder('r')
+      .leftJoin('r.requestType', 'rt')
+      .leftJoin('r.requestTypeOption', 'rto')
+      .leftJoin(SubSector, 'ss', 'ss.id = r.sub_sector_id')
+      .select('r.createdAt', 'createdAt')
+      .addSelect('r.updatedAt', 'updatedAt')
+      .addSelect('r.status', 'status')
+      .addSelect('r.house_no', 'houseNo')
+      .addSelect('r.street_no', 'streetNo')
+      .addSelect('r.sub_sector_id', 'subSectorId')
+      .addSelect('COALESCE(ss.name, "N/A")', 'subSectorName')
+      .addSelect('COALESCE(rt.name, "Unknown")', 'requestTypeName')
+      .addSelect('COALESCE(rt.slug, "")', 'requestTypeSlug')
+      .addSelect('COALESCE(rto.label, "General")', 'serviceOptionLabel')
+      .where('r.createdAt >= :start AND r.createdAt < :endExclusive', dateParams)
+      .getRawMany<{
+        createdAt: Date;
+        updatedAt: Date;
+        status: string;
+        houseNo: string;
+        streetNo: string;
+        subSectorId: string;
+        subSectorName: string;
+        requestTypeName: string;
+        requestTypeSlug: string;
+        serviceOptionLabel: string;
+      }>();
+
+    const isCompletedStatus = (status: string): boolean =>
+      status === RequestStatus.COMPLETED || status === RequestStatus.DONE;
+    const isPendingStatus = (status: string): boolean =>
+      status === RequestStatus.PENDING || status === RequestStatus.IN_PROGRESS;
+
+    const byDateMap = new Map<string, { total: number; completed: number; pending: number }>();
+    const byTypeMap = new Map<string, { requestTypeName: string; requestTypeSlug: string; requestsCount: number }>();
+    const byOptionMap = new Map<string, { serviceOptionLabel: string; requestsCount: number }>();
+    const byHouseMap = new Map<string, { subSectorName: string; houseNo: string; streetNo: string; totalRequests: number; pendingRequests: number }>();
+    const subSectorPerfMap = new Map<number, { subSectorId: number; subSectorName: string; requestsCount: number; completedCount: number }>();
+    const subSectorStatusMixMap = new Map<
+      number,
+      {
+        subSectorId: number;
+        subSectorName: string;
+        totalRequests: number;
+        pendingCount: number;
+        inProgressCount: number;
+        completedCount: number;
+        cancelledCount: number;
+      }
+    >();
+    const hourlyDemandMap = new Map<number, number>();
+
+    let completedCount = 0;
+    let cancelledCount = 0;
+    let backlogCount = 0;
+    let totalResolutionHours = 0;
+    let resolvedRows = 0;
+    for (const row of requestAnalyticsRows) {
+      const dateKey = new Date(row.createdAt).toISOString().slice(0, 10);
+      const dateBucket = byDateMap.get(dateKey) ?? { total: 0, completed: 0, pending: 0 };
+      dateBucket.total += 1;
+      if (isCompletedStatus(row.status)) dateBucket.completed += 1;
+      if (isPendingStatus(row.status)) dateBucket.pending += 1;
+      byDateMap.set(dateKey, dateBucket);
+
+      const typeKey = `${row.requestTypeSlug}::${row.requestTypeName}`;
+      const typeBucket = byTypeMap.get(typeKey) ?? {
+        requestTypeName: row.requestTypeName,
+        requestTypeSlug: row.requestTypeSlug,
+        requestsCount: 0,
+      };
+      typeBucket.requestsCount += 1;
+      byTypeMap.set(typeKey, typeBucket);
+
+      const optionBucket = byOptionMap.get(row.serviceOptionLabel) ?? {
+        serviceOptionLabel: row.serviceOptionLabel,
+        requestsCount: 0,
+      };
+      optionBucket.requestsCount += 1;
+      byOptionMap.set(row.serviceOptionLabel, optionBucket);
+
+      const houseKey = `${row.subSectorName}::${row.houseNo}::${row.streetNo}`;
+      const houseBucket = byHouseMap.get(houseKey) ?? {
+        subSectorName: row.subSectorName,
+        houseNo: row.houseNo,
+        streetNo: row.streetNo,
+        totalRequests: 0,
+        pendingRequests: 0,
+      };
+      houseBucket.totalRequests += 1;
+      if (isPendingStatus(row.status)) houseBucket.pendingRequests += 1;
+      byHouseMap.set(houseKey, houseBucket);
+
+      const subSectorId = Number(row.subSectorId) || 0;
+      const subSectorBucket = subSectorPerfMap.get(subSectorId) ?? {
+        subSectorId,
+        subSectorName: row.subSectorName,
+        requestsCount: 0,
+        completedCount: 0,
+      };
+      subSectorBucket.requestsCount += 1;
+      if (isCompletedStatus(row.status)) subSectorBucket.completedCount += 1;
+      subSectorPerfMap.set(subSectorId, subSectorBucket);
+
+      const statusMixBucket = subSectorStatusMixMap.get(subSectorId) ?? {
+        subSectorId,
+        subSectorName: row.subSectorName,
+        totalRequests: 0,
+        pendingCount: 0,
+        inProgressCount: 0,
+        completedCount: 0,
+        cancelledCount: 0,
+      };
+      statusMixBucket.totalRequests += 1;
+      if (row.status === RequestStatus.PENDING) statusMixBucket.pendingCount += 1;
+      if (row.status === RequestStatus.IN_PROGRESS) statusMixBucket.inProgressCount += 1;
+      if (isCompletedStatus(row.status)) statusMixBucket.completedCount += 1;
+      if (row.status === RequestStatus.CANCELLED) statusMixBucket.cancelledCount += 1;
+      subSectorStatusMixMap.set(subSectorId, statusMixBucket);
+
+      const hour = new Date(row.createdAt).getUTCHours();
+      hourlyDemandMap.set(hour, (hourlyDemandMap.get(hour) ?? 0) + 1);
+
+      if (isCompletedStatus(row.status)) {
+        completedCount += 1;
+        const createdAtMs = new Date(row.createdAt).getTime();
+        const updatedAtMs = new Date(row.updatedAt).getTime();
+        if (updatedAtMs > createdAtMs) {
+          totalResolutionHours += (updatedAtMs - createdAtMs) / (1000 * 60 * 60);
+          resolvedRows += 1;
+        }
+      }
+      if (row.status === RequestStatus.CANCELLED) cancelledCount += 1;
+      if (isPendingStatus(row.status)) backlogCount += 1;
+    }
+
+    const dailyTrend = Array.from(byDateMap.entries())
+      .map(([date, v]) => ({ date, total: v.total, completed: v.completed, pending: v.pending }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const topRequestTypes = Array.from(byTypeMap.values())
+      .sort((a, b) => b.requestsCount - a.requestsCount)
+      .slice(0, 8);
+    const topServiceOptions = Array.from(byOptionMap.values())
+      .sort((a, b) => b.requestsCount - a.requestsCount)
+      .slice(0, 8);
+    const topHouses = Array.from(byHouseMap.values())
+      .sort((a, b) => b.totalRequests - a.totalRequests)
+      .slice(0, 10);
+    const repeatDemandHouses = Array.from(byHouseMap.values())
+      .filter((row) => row.totalRequests >= 2)
+      .sort((a, b) => b.totalRequests - a.totalRequests)
+      .slice(0, 10)
+      .map((row) => ({
+        subSectorName: row.subSectorName,
+        houseNo: row.houseNo,
+        streetNo: row.streetNo,
+        totalRequests: row.totalRequests,
+      }));
+
+    const usersBySubSectorMap = new Map<number, number>();
+    for (const row of usersSummary.bySubSector) {
+      usersBySubSectorMap.set(row.subSectorId, row.usersCount);
+    }
+    const subSectorPerformance = Array.from(subSectorPerfMap.values())
+      .map((row) => ({
+        subSectorId: row.subSectorId,
+        subSectorName: row.subSectorName,
+        usersCount: usersBySubSectorMap.get(row.subSectorId) ?? 0,
+        requestsCount: row.requestsCount,
+        completedCount: row.completedCount,
+        completionRate:
+          row.requestsCount > 0
+            ? Number(((row.completedCount / row.requestsCount) * 100).toFixed(1))
+            : 0,
+      }))
+      .sort((a, b) => b.requestsCount - a.requestsCount);
+    const statusMixBySubSector = Array.from(subSectorStatusMixMap.values())
+      .map((row) => ({
+        ...row,
+        completionRate:
+          row.totalRequests > 0
+            ? Number(((row.completedCount / row.totalRequests) * 100).toFixed(1))
+            : 0,
+      }))
+      .sort((a, b) => b.totalRequests - a.totalRequests);
+
+    const agingBucketsSeed = new Map<string, number>([
+      ['0-1 day', 0],
+      ['2-3 days', 0],
+      ['4-7 days', 0],
+      ['8+ days', 0],
+    ]);
+    const nowMs = Date.now();
+    for (const row of requestAnalyticsRows) {
+      if (!isPendingStatus(row.status)) continue;
+      const ageDays = (nowMs - new Date(row.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+      const bucket = ageDays <= 1 ? '0-1 day' : ageDays <= 3 ? '2-3 days' : ageDays <= 7 ? '4-7 days' : '8+ days';
+      agingBucketsSeed.set(bucket, (agingBucketsSeed.get(bucket) ?? 0) + 1);
+    }
+    const agingBuckets = Array.from(agingBucketsSeed.entries()).map(([bucket, count]) => ({ bucket, count }));
+
+    const hourlyDemand: Array<{ hour: number; count: number }> = [];
+    for (let hour = 0; hour < 24; hour += 1) {
+      hourlyDemand.push({ hour, count: hourlyDemandMap.get(hour) ?? 0 });
+    }
+
+    const previousRequests = await this.requestRepo
+      .createQueryBuilder('r')
+      .where('r.createdAt >= :start AND r.createdAt < :endExclusive', {
+        start: previousRangeStart,
+        endExclusive: previousRangeEnd,
+      })
+      .getCount();
+    const previousUsers = await this.userRepo
+      .createQueryBuilder('u')
+      .where('u.createdAt >= :start AND u.createdAt < :endExclusive', {
+        start: previousRangeStart,
+        endExclusive: previousRangeEnd,
+      })
+      .getCount();
+
+    const requestsGrowthPercent =
+      previousRequests > 0
+        ? Number((((requestsSummary.totalRequests - previousRequests) / previousRequests) * 100).toFixed(1))
+        : requestsSummary.totalRequests > 0
+          ? 100
+          : 0;
+    const usersGrowthPercent =
+      previousUsers > 0
+        ? Number((((usersSummary.totalUsers - previousUsers) / previousUsers) * 100).toFixed(1))
+        : usersSummary.totalUsers > 0
+          ? 100
+          : 0;
+
+    const topSubSectorByRequests =
+      requestsSummary.bySubSector.length > 0
+        ? [...requestsSummary.bySubSector].sort((a, b) => b.requestsCount - a.requestsCount)[0]
+        : null;
+    const topSubSectorByUsers =
+      usersSummary.bySubSector.length > 0
+        ? [...usersSummary.bySubSector].sort((a, b) => b.usersCount - a.usersCount)[0]
+        : null;
+    const insights = {
+      completionRate:
+        requestsSummary.totalRequests > 0
+          ? Number(((completedCount / requestsSummary.totalRequests) * 100).toFixed(1))
+          : 0,
+      cancellationRate:
+        requestsSummary.totalRequests > 0
+          ? Number(((cancelledCount / requestsSummary.totalRequests) * 100).toFixed(1))
+          : 0,
+      backlogCount,
+      avgResolutionHours: resolvedRows > 0 ? Number((totalResolutionHours / resolvedRows).toFixed(1)) : 0,
+      requestsGrowthPercent,
+      usersGrowthPercent,
+      topSubSectorByRequests,
+      topSubSectorByUsers,
+    };
+
+    return {
+      filter: {
+        period: range.period,
+        from: range.from,
+        to: range.to,
+      },
+      usersBySubSectorHouse,
+      requestsPerHouseDateStatus,
+      usersSummary,
+      requestsSummary,
+      tankerSummary,
+      insights,
+      analytics: {
+        dailyTrend,
+        topRequestTypes,
+        topServiceOptions,
+        topHouses,
+        subSectorPerformance,
+        statusMixBySubSector,
+        agingBuckets,
+        repeatDemandHouses,
+        hourlyDemand,
+      },
+    };
   }
 }
