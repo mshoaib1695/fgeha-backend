@@ -13,6 +13,16 @@ export class CreateRequestTypeOptionDto {
   @MaxLength(200)
   label: string;
 
+  @ApiPropertyOptional({
+    example: 'order_water_tanker',
+    description: 'Optional slug for analytics/report filters. Auto-generated from label if omitted.',
+    maxLength: 120,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  slug?: string | null;
+
   @ApiProperty({ enum: ['form', 'list', 'rules', 'link', 'phone'] })
   @IsEnum(['form', 'list', 'rules', 'link', 'phone'])
   optionType: OptionType;

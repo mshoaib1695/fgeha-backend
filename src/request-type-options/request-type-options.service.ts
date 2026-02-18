@@ -17,6 +17,16 @@ function deriveDefaultOptionPrefix(label: string): string {
   return seed.slice(0, 6) || 'SRV';
 }
 
+function deriveOptionSlug(slugRaw: string | null | undefined, label: string): string {
+  const source = (slugRaw ?? '').trim() || label;
+  const normalized = source
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return normalized || 'service_option';
+}
+
 @Injectable()
 export class RequestTypeOptionsService {
   constructor(
@@ -119,6 +129,7 @@ export class RequestTypeOptionsService {
     const option = this.repo.create({
       requestTypeId: dto.requestTypeId,
       label: dto.label,
+      slug: deriveOptionSlug(dto.slug, dto.label),
       optionType: dto.optionType,
       config: this.normalizeConfig(dto.optionType, dto.config ?? null),
       displayOrder: dto.displayOrder ?? 0,
@@ -135,7 +146,16 @@ export class RequestTypeOptionsService {
     if (user.role !== UserRole.ADMIN) throw new ForbiddenException('Admin only');
     const option = await this.repo.findOne({ where: { id } });
     if (!option) throw new NotFoundException('Option not found');
+    const previousLabel = option.label;
     if (dto.label != null) option.label = dto.label;
+    if (dto.slug !== undefined) {
+      option.slug = deriveOptionSlug(dto.slug, option.label);
+    } else if (dto.label != null && (!option.slug || !option.slug.trim())) {
+      option.slug = deriveOptionSlug(null, option.label);
+    } else if (dto.label != null && previousLabel !== option.label && option.slug === deriveOptionSlug(null, previousLabel)) {
+      // Keep auto-generated slugs in sync when label changes.
+      option.slug = deriveOptionSlug(null, option.label);
+    }
     if (dto.optionType != null) option.optionType = dto.optionType;
     if (dto.config !== undefined) {
       option.config = this.normalizeConfig(dto.optionType ?? option.optionType, dto.config);

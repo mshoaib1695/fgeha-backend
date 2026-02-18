@@ -27,8 +27,7 @@ import { ApprovedUserGuard } from '../auth/guards/approved-user.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { UserRole } from '../users/entities/user.entity';
-import { User } from '../users/entities/user.entity';
+import { User, UserRole } from '../users/entities/user.entity';
 
 @ApiTags('requests')
 @Controller('requests')

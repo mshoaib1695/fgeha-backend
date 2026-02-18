@@ -36,6 +36,10 @@ export class RequestTypeOptionEntity {
   @Column({ length: 200 })
   label: string;
 
+  /** URL/analytics friendly identifier for this option (e.g. water_tanker_order). */
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  slug: string | null;
+
   @Column({ name: 'option_type', type: 'varchar', length: 20 })
   optionType: OptionType;
 

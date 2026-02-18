@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, MoreThanOrEqual, Repository, SelectQueryBuilder } from 'typeorm';
+import { MoreThanOrEqual, Repository, SelectQueryBuilder } from 'typeorm';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { Request as RequestEntity, RequestStatus } from './entities/request.entity';
@@ -175,6 +175,7 @@ function parseHHmm(s: string): { h: number; m: number } {
 }
 
 type ReportsPeriod = 'today' | 'week' | 'month' | 'custom';
+const TANKER_OPTION_SLUG = 'order_water_tanker';
 
 function deriveOptionRequestNumberPrefix(
   option: Pick<RequestTypeOptionEntity, 'label' | 'requestNumberPrefix'>,
@@ -875,6 +876,7 @@ export class RequestsService {
     const requestsPerHouseDateStatusRaw = await this.requestRepo
       .createQueryBuilder('r')
       .leftJoin(SubSector, 'ss', 'ss.id = r.sub_sector_id')
+      .leftJoin('r.requestTypeOption', 'rto')
       .select('r.sub_sector_id', 'subSectorId')
       .addSelect('COALESCE(ss.name, "N/A")', 'subSectorName')
       .addSelect('r.house_no', 'houseNo')
@@ -937,6 +939,7 @@ export class RequestsService {
     const requestsSummaryBySubSectorRaw = await this.requestRepo
       .createQueryBuilder('r')
       .leftJoin(SubSector, 'ss', 'ss.id = r.sub_sector_id')
+      .leftJoin('r.requestTypeOption', 'rto')
       .select('r.sub_sector_id', 'subSectorId')
       .addSelect('COALESCE(ss.name, "N/A")', 'subSectorName')
       .addSelect('COUNT(*)', 'requestsCount')
@@ -947,6 +950,7 @@ export class RequestsService {
       .getRawMany<{ subSectorId: string; subSectorName: string; requestsCount: string }>();
     const requestsSummaryByStatusRaw = await this.requestRepo
       .createQueryBuilder('r')
+      .leftJoin('r.requestTypeOption', 'rto')
       .select('r.status', 'status')
       .addSelect('COUNT(*)', 'requestsCount')
       .where('r.createdAt >= :start AND r.createdAt < :endExclusive', dateParams)
@@ -974,13 +978,9 @@ export class RequestsService {
       .leftJoin('r.requestType', 'rt')
       .leftJoin('r.requestTypeOption', 'rto')
       .where('r.createdAt >= :start AND r.createdAt < :endExclusive', dateParams)
-      .andWhere(
-        new Brackets((qb) => {
-          qb.where('LOWER(rt.slug) LIKE :tanker', { tanker: '%tanker%' })
-            .orWhere('LOWER(rt.name) LIKE :tanker', { tanker: '%tanker%' })
-            .orWhere('LOWER(rto.label) LIKE :tanker', { tanker: '%tanker%' });
-        }),
-      );
+      .andWhere('LOWER(COALESCE(rto.slug, "")) = :tankerOptionSlug', {
+        tankerOptionSlug: TANKER_OPTION_SLUG,
+      });
     const tankerCountsRaw = await tankerBaseQb
       .clone()
       .select('COUNT(*)', 'requested')
@@ -1247,6 +1247,7 @@ export class RequestsService {
 
     const previousRequests = await this.requestRepo
       .createQueryBuilder('r')
+      .leftJoin('r.requestTypeOption', 'rto')
       .where('r.createdAt >= :start AND r.createdAt < :endExclusive', {
         start: previousRangeStart,
         endExclusive: previousRangeEnd,
