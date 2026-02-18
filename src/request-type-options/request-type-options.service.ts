@@ -66,6 +66,9 @@ export class RequestTypeOptionsService {
         rules,
       };
     }
+    if (optionType === 'notification') {
+      return { content: typeof cfg.content === 'string' ? cfg.content : undefined };
+    }
     if (optionType === 'link') {
       return { url: typeof cfg.url === 'string' ? cfg.url : undefined };
     }

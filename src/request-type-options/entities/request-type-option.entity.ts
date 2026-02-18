@@ -8,10 +8,10 @@ import {
 } from 'typeorm';
 import { RequestTypeEntity } from '../../request-types/entities/request-type.entity';
 
-export type OptionType = 'form' | 'list' | 'rules' | 'link' | 'phone';
+export type OptionType = 'form' | 'list' | 'rules' | 'notification' | 'link' | 'phone';
 export type FormIssueImageRequirement = 'none' | 'optional' | 'required';
 
-/** Config JSON by option_type: form={}, list={ listKey: 'daily_bulletin'|'requests'|'news' }, rules={ content: string }, link={ url: string }, phone={ phoneNumber: string } */
+/** Config JSON by option_type: form={}, list={ listKey: 'daily_bulletin'|'requests'|'news' }, rules={ content|rules[] }, notification={ content }, link={ url }, phone={ phoneNumber } */
 export interface RequestTypeOptionConfig {
   issueImage?: FormIssueImageRequirement;
   listKey?: string;
@@ -55,7 +55,7 @@ export class RequestTypeOptionEntity {
   @Column({ name: 'request_number_next', type: 'int', default: 1 })
   requestNumberNext: number;
 
-  /** JSON: form={}, list={ listKey }, rules={ content }, link={ url }, phone={ phoneNumber } */
+  /** JSON: form={}, list={ listKey }, rules={ content|rules[] }, notification={ content }, link={ url }, phone={ phoneNumber } */
   @Column({ type: 'json', nullable: true })
   config: RequestTypeOptionConfig | null;
 
