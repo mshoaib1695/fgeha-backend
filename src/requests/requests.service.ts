@@ -758,6 +758,18 @@ export class RequestsService {
         delivered: number;
         pending: number;
       }>;
+      requests: Array<{
+        requestId: number;
+        requestNumber: string | null;
+        createdAt: string;
+        subSectorName: string;
+        houseNo: string;
+        streetNo: string;
+        serviceOptionLabel: string;
+        status: string;
+        userName: string;
+        mobileNo: string;
+      }>;
     };
     insights: {
       completionRate: number;
@@ -1020,6 +1032,35 @@ export class RequestsService {
         requested: string;
         delivered: string;
       }>();
+
+    const tankerRequestsRaw = await tankerBaseQb
+      .clone()
+      .leftJoin(SubSector, 'ss', 'ss.id = r.sub_sector_id')
+      .leftJoin(User, 'u', 'u.id = r.userId')
+      .select('r.id', 'requestId')
+      .addSelect('r.request_number', 'requestNumber')
+      .addSelect('r.createdAt', 'createdAt')
+      .addSelect('COALESCE(ss.name, "N/A")', 'subSectorName')
+      .addSelect('r.house_no', 'houseNo')
+      .addSelect('r.street_no', 'streetNo')
+      .addSelect('COALESCE(rto.label, "Water Tanker")', 'serviceOptionLabel')
+      .addSelect('r.status', 'status')
+      .addSelect('COALESCE(u.full_name, "N/A")', 'userName')
+      .addSelect('CONCAT(COALESCE(u.phone_country_code, ""), " ", COALESCE(u.phone_number, ""))', 'mobileNo')
+      .orderBy('r.createdAt', 'DESC')
+      .getRawMany<{
+        requestId: string;
+        requestNumber: string | null;
+        createdAt: Date;
+        subSectorName: string;
+        houseNo: string;
+        streetNo: string;
+        serviceOptionLabel: string;
+        status: string;
+        userName: string;
+        mobileNo: string;
+      }>();
+
     const tankerSummary = {
       requested,
       delivered,
@@ -1036,6 +1077,21 @@ export class RequestsService {
           pending: Math.max(0, rowRequested - rowDelivered),
         };
       }),
+      requests: tankerRequestsRaw.map((row) => ({
+        requestId: Number(row.requestId) || 0,
+        requestNumber: row.requestNumber,
+        createdAt:
+          row.createdAt instanceof Date
+            ? row.createdAt.toISOString()
+            : new Date(row.createdAt).toISOString(),
+        subSectorName: row.subSectorName,
+        houseNo: row.houseNo,
+        streetNo: row.streetNo,
+        serviceOptionLabel: row.serviceOptionLabel,
+        status: row.status,
+        userName: row.userName,
+        mobileNo: (row.mobileNo ?? '').trim(),
+      })),
     };
 
     const requestAnalyticsRows = await this.requestRepo
