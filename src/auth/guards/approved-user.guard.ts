@@ -15,6 +15,9 @@ export class ApprovedUserGuard implements CanActivate {
     if (user.accountStatus === AccountStatus.DEACTIVATED) {
       throw new ForbiddenException('Your account is deactivated');
     }
+    if (user.emailVerified === false) {
+      throw new ForbiddenException('Please verify your email before signing in. Check your inbox for the verification link.');
+    }
     if (user.role === UserRole.ADMIN) return true;
     if (user.approvalStatus !== ApprovalStatus.APPROVED)
       throw new ForbiddenException('Your registration is not yet approved');

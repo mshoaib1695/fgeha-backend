@@ -89,6 +89,16 @@ export class User {
   })
   accountStatus: AccountStatus;
 
+  /** If false, user must verify email before they can log in. */
+  @Column({ name: 'email_verified', default: true })
+  emailVerified: boolean;
+
+  @Column({ name: 'email_verification_token', type: 'varchar', length: 64, nullable: true })
+  emailVerificationToken: string | null;
+
+  @Column({ name: 'email_verification_token_expires_at', type: 'datetime', nullable: true })
+  emailVerificationTokenExpiresAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

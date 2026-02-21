@@ -34,4 +34,15 @@ export class AuthService {
     return this.usersService.create(createUserDto);
   }
 
+  async verifyEmail(token: string): Promise<{ email: string }> {
+    return this.usersService.verifyEmail(token);
+  }
+
+  async verifyEmailByCode(email: string, code: string): Promise<{ email: string }> {
+    return this.usersService.verifyEmailByCode(email, code);
+  }
+
+  async resendVerificationCode(email: string): Promise<void> {
+    return this.usersService.resendVerificationCode(email);
+  }
 }

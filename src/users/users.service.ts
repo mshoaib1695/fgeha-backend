@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ForbiddenException,
   UnauthorizedException,
+  BadRequestException,
   OnModuleInit,
   Logger,
 } from '@nestjs/common';
@@ -13,13 +14,14 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { User, UserRole, ApprovalStatus, AccountStatus } from './entities/user.entity';
 import { SubSector } from './entities/sub-sector.entity';
 import { Request } from '../requests/entities/request.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
+import { MailService } from './mail.service';
 
 @Injectable()
 export class UsersService implements OnModuleInit {
@@ -33,6 +35,7 @@ export class UsersService implements OnModuleInit {
     @InjectRepository(Request)
     private readonly requestRepo: Repository<Request>,
     private readonly config: ConfigService,
+    private readonly mailService: MailService,
   ) {}
 
   /** Directory for uploaded ID card images (created at runtime if needed). */
@@ -140,11 +143,26 @@ export class UsersService implements OnModuleInit {
     await this.subSectorRepo.save(defaultSectors);
   }
 
+  /** Message used when email exists but is unverified; app will resend and redirect to verify screen. */
+  static readonly EMAIL_UNVERIFIED_RESENT = 'EMAIL_UNVERIFIED_RESENT';
+
   async create(createUserDto: CreateUserDto): Promise<Omit<User, 'password'>> {
     const existing = await this.userRepo.findOne({
       where: { email: createUserDto.email },
     });
-    if (existing) throw new ConflictException('Email already registered');
+    if (existing) {
+      if (existing.emailVerified === false) {
+        const verificationCode = String(Math.floor(100000 + (randomBytes(4).readUInt32BE(0) % 900000)));
+        const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        existing.emailVerificationToken = verificationCode;
+        existing.emailVerificationTokenExpiresAt = verificationExpires;
+        await this.userRepo.save(existing);
+        await this.mailService.sendVerificationEmail(existing.email, verificationCode);
+        this.logger.log(`Resent verification code to existing unverified user ${existing.email}`);
+        throw new ConflictException(UsersService.EMAIL_UNVERIFIED_RESENT);
+      }
+      throw new ConflictException('Email already registered');
+    }
     const subSector = await this.subSectorRepo.findOne({
       where: { id: createUserDto.subSectorId },
     });
@@ -161,6 +179,10 @@ export class UsersService implements OnModuleInit {
       idCardBackPath = this.saveIdCardImage(createUserDto.idCardBack.trim(), 'back');
     }
 
+    // 6-digit code for in-app verification screen
+    const verificationCode = String(Math.floor(100000 + (randomBytes(4).readUInt32BE(0) % 900000)));
+    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
     const { idCardFront, idCardBack, ...dtoWithoutCards } = createUserDto;
     const user = this.userRepo.create({
       ...dtoWithoutCards,
@@ -170,10 +192,67 @@ export class UsersService implements OnModuleInit {
       accountStatus: AccountStatus.ACTIVE,
       idCardFront: idCardFrontPath,
       idCardBack: idCardBackPath,
+      emailVerified: false,
+      emailVerificationToken: verificationCode,
+      emailVerificationTokenExpiresAt: verificationExpires,
     });
     const saved = await this.userRepo.save(user);
+    await this.mailService.sendVerificationEmail(saved.email, verificationCode);
     const { password: _, ...rest } = saved;
     return rest;
+  }
+
+  async verifyEmail(tokenOrCode: string): Promise<{ email: string }> {
+    const code = tokenOrCode?.trim();
+    if (!code) throw new BadRequestException('Invalid or expired verification code');
+    const user = await this.userRepo.findOne({
+      where: { emailVerificationToken: code },
+    });
+    if (!user) throw new BadRequestException('Invalid or expired verification code');
+    if (user.emailVerificationTokenExpiresAt && user.emailVerificationTokenExpiresAt < new Date()) {
+      throw new BadRequestException('Verification code has expired');
+    }
+    user.emailVerified = true;
+    user.emailVerificationToken = null;
+    user.emailVerificationTokenExpiresAt = null;
+    await this.userRepo.save(user);
+    this.logger.log(`Email verified for user ${user.id} (${user.email})`);
+    return { email: user.email };
+  }
+
+  async verifyEmailByCode(email: string, code: string): Promise<{ email: string }> {
+    const trimmedEmail = email?.trim();
+    const trimmedCode = code?.trim();
+    if (!trimmedEmail || !trimmedCode) throw new BadRequestException('Email and code are required');
+    const user = await this.userRepo.findOne({
+      where: { email: trimmedEmail, emailVerificationToken: trimmedCode },
+    });
+    if (!user) throw new BadRequestException('Invalid or expired verification code');
+    if (user.emailVerificationTokenExpiresAt && user.emailVerificationTokenExpiresAt < new Date()) {
+      throw new BadRequestException('Verification code has expired');
+    }
+    user.emailVerified = true;
+    user.emailVerificationToken = null;
+    user.emailVerificationTokenExpiresAt = null;
+    await this.userRepo.save(user);
+    this.logger.log(`Email verified for user ${user.id} (${user.email})`);
+    return { email: user.email };
+  }
+
+  async resendVerificationCode(email: string): Promise<void> {
+    const trimmedEmail = email?.trim();
+    if (!trimmedEmail) throw new BadRequestException('Email is required');
+    const user = await this.userRepo.findOne({ where: { email: trimmedEmail } });
+    if (!user || user.emailVerified) {
+      return;
+    }
+    const verificationCode = String(Math.floor(100000 + (randomBytes(4).readUInt32BE(0) % 900000)));
+    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    user.emailVerificationToken = verificationCode;
+    user.emailVerificationTokenExpiresAt = verificationExpires;
+    await this.userRepo.save(user);
+    await this.mailService.sendVerificationEmail(user.email, verificationCode);
+    this.logger.log(`Verification code resent to ${user.email}`);
   }
 
   async findByEmail(email: string): Promise<User | null> {
