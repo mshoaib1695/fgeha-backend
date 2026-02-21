@@ -6,10 +6,13 @@ import express from 'express';
 import path from 'path';
 import { AppModule } from './app.module';
 
+/** Max JSON body size (e.g. profile image base64). If using nginx, set client_max_body_size to match. */
+const BODY_LIMIT = '20mb';
+
 async function bootstrap() {
   const server = express();
-  server.use(express.json({ limit: '10mb' }));
-  server.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  server.use(express.json({ limit: BODY_LIMIT }));
+  server.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
   server.use('/idcards', express.static(path.join(process.cwd(), 'idcards')));
   server.use('/profiles', express.static(path.join(process.cwd(), 'profiles')));
   server.use('/daily-files', express.static(path.join(process.cwd(), 'daily-files')));

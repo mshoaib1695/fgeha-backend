@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   UnauthorizedException,
   OnModuleInit,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -22,6 +23,8 @@ import { UpdateMeDto } from './dto/update-me.dto';
 
 @Injectable()
 export class UsersService implements OnModuleInit {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
@@ -73,15 +76,26 @@ export class UsersService implements OnModuleInit {
    * Save a base64 data URL to profiles folder. Returns relative path like "profiles/uuid.jpg".
    */
   private saveProfileImage(dataUrl: string): string {
+    const prefix = dataUrl.slice(0, 50);
+    this.logger.log(`saveProfileImage: input length=${dataUrl?.length ?? 0}, prefix=${prefix}...`);
     const match = dataUrl.match(/^data:image\/(\w+);base64,(.+)$/);
-    if (!match) throw new ConflictException('Invalid image data URL');
+    if (!match) {
+      this.logger.warn(`saveProfileImage: Invalid image data URL (prefix=${prefix})`);
+      throw new ConflictException('Invalid image data URL');
+    }
     const ext = match[1] === 'jpeg' || match[1] === 'jpg' ? 'jpg' : match[1];
     const base64 = match[2];
-    const buf = Buffer.from(base64, 'base64');
     const filename = `${randomUUID()}.${ext}`;
     const filePath = path.join(this.profilesDir, filename);
-    fs.writeFileSync(filePath, buf);
-    return `profiles/${filename}`;
+    try {
+      const buf = Buffer.from(base64, 'base64');
+      fs.writeFileSync(filePath, buf);
+      this.logger.log(`saveProfileImage: saved ${filename}`);
+      return `profiles/${filename}`;
+    } catch (err) {
+      this.logger.error(`saveProfileImage: failed to write file`, err instanceof Error ? err.stack : String(err));
+      throw err;
+    }
   }
 
   /** Create default admin if no admin user exists (email/password from env or defaults). */
@@ -252,7 +266,13 @@ export class UsersService implements OnModuleInit {
       user.subSectorId = dto.subSectorId;
     }
     if (dto.profileImage !== undefined && dto.profileImage.trim()) {
-      user.profileImage = this.saveProfileImage(dto.profileImage.trim());
+      this.logger.log(`updateMe: processing profile image for user id=${user.id}, payload length=${dto.profileImage.length}`);
+      try {
+        user.profileImage = this.saveProfileImage(dto.profileImage.trim());
+      } catch (err) {
+        this.logger.error(`updateMe: profile image save failed for user id=${user.id}`, err instanceof Error ? err.stack : String(err));
+        throw err;
+      }
     }
     const saved = await this.userRepo.save(user);
     const { password: _, ...rest } = saved;
