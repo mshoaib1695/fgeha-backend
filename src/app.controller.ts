@@ -23,4 +23,16 @@ export class AppController {
       timestamp: new Date().toISOString(),
     };
   }
+
+  @Public()
+  @Get('app-version')
+  @ApiOperation({ summary: 'App version config - minimum/latest version and store URLs for force-update and soft prompt' })
+  appVersion(): {
+    minimumVersion: string;
+    latestVersion?: string;
+    storeUrlAndroid?: string;
+    storeUrlIos?: string;
+  } {
+    return this.appService.getAppVersion();
+  }
 }
