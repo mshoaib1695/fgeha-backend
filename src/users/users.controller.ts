@@ -13,6 +13,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -68,6 +69,17 @@ export class UsersController {
   @Patch('me')
   updateMe(@Body() body: UpdateMeDto, @CurrentUser() user: User) {
     return this.usersService.updateMe(user as User, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @Patch('me/change-password')
+  changePasswordMe(@Body() body: ChangePasswordDto, @CurrentUser() user: User) {
+    return this.usersService.changePasswordMe(
+      user as User,
+      body.currentPassword,
+      body.newPassword,
+    );
   }
 
   @UseGuards(JwtAuthGuard)

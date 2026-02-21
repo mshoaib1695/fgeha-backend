@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  UnauthorizedException,
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -214,6 +215,23 @@ export class UsersService implements OnModuleInit {
     if (currentUser.role !== UserRole.ADMIN && currentUser.id !== id)
       throw new ForbiddenException('Cannot view other user');
     return u as User;
+  }
+
+  /** Current user changes their password. Requires current password. */
+  async changePasswordMe(
+    currentUser: User,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.userRepo.findOne({
+      where: { id: currentUser.id },
+      select: ['id', 'password'],
+    });
+    if (!user) throw new NotFoundException('User not found');
+    const ok = await this.validatePassword(currentPassword, user.password);
+    if (!ok) throw new UnauthorizedException('Current password is incorrect');
+    user.password = await bcrypt.hash(newPassword, 10);
+    await this.userRepo.save(user);
   }
 
   /** Current user can update their own profile (name, phone, address, profile image). No role/approvalStatus. */
