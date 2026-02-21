@@ -137,6 +137,7 @@ export class RequestTypeOptionsService {
       config: this.normalizeConfig(dto.optionType, dto.config ?? null),
       displayOrder: dto.displayOrder ?? 0,
       imageUrl: dto.imageUrl ?? null,
+      headerIcon: dto.headerIcon ?? null,
       requestNumberPrefix: prefix,
       requestNumberPadding: 4,
       requestNumberNext: 1,
@@ -165,6 +166,7 @@ export class RequestTypeOptionsService {
     }
     if (dto.displayOrder != null) option.displayOrder = dto.displayOrder;
     if (dto.imageUrl !== undefined) option.imageUrl = dto.imageUrl;
+    if (dto.headerIcon !== undefined) option.headerIcon = dto.headerIcon;
     if (dto.requestNumberPrefix !== undefined) {
       const normalized = dto.requestNumberPrefix?.trim().toUpperCase() ?? '';
       option.requestNumberPrefix = normalized || deriveDefaultOptionPrefix(option.label);

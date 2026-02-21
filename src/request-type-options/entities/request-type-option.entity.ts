@@ -66,6 +66,10 @@ export class RequestTypeOptionEntity {
   @Column({ name: 'image_url', type: 'varchar', length: 500, nullable: true })
   imageUrl: string | null;
 
+  /** Optional header icon: Ionicons name (e.g. list-outline, document-text-outline) or single emoji. App shows this in screen header. */
+  @Column({ name: 'header_icon', type: 'varchar', length: 80, nullable: true })
+  headerIcon: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

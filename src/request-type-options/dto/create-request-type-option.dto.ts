@@ -46,6 +46,15 @@ export class CreateRequestTypeOptionDto {
   imageUrl?: string | null;
 
   @ApiPropertyOptional({
+    description: 'Header icon: Ionicons name (e.g. list-outline, document-text-outline) or single emoji (e.g. 📋). Shown in app screen header.',
+    maxLength: 80,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  headerIcon?: string | null;
+
+  @ApiPropertyOptional({
     description: 'Request ID prefix for this service option (e.g. OWT -> OWT#0001)',
     maxLength: 20,
   })
