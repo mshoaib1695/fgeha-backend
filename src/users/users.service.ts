@@ -261,6 +261,8 @@ export class UsersService implements OnModuleInit {
     if (!user) throw new NotFoundException('User not found');
     if (updateUserDto.approvalStatus !== undefined)
       user.approvalStatus = updateUserDto.approvalStatus;
+    if (updateUserDto.accountStatus !== undefined)
+      user.accountStatus = updateUserDto.accountStatus;
     if (updateUserDto.fullName !== undefined) user.fullName = updateUserDto.fullName;
     if (updateUserDto.email !== undefined) user.email = updateUserDto.email;
     if (updateUserDto.password !== undefined)
