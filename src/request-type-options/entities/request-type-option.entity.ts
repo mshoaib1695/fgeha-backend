@@ -70,6 +70,10 @@ export class RequestTypeOptionEntity {
   @Column({ name: 'header_icon', type: 'varchar', length: 80, nullable: true })
   headerIcon: string | null;
 
+  /** Optional hint/subtitle shown under option label in app (e.g. "Submit a request", "Open list"). Overrides default per option type. */
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  hint: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

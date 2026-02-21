@@ -55,6 +55,15 @@ export class CreateRequestTypeOptionDto {
   headerIcon?: string | null;
 
   @ApiPropertyOptional({
+    description: 'Hint text shown under option label in app (e.g. "Submit a request", "Open list"). Leave empty for default per type.',
+    maxLength: 120,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  hint?: string | null;
+
+  @ApiPropertyOptional({
     description: 'Request ID prefix for this service option (e.g. OWT -> OWT#0001)',
     maxLength: 20,
   })
