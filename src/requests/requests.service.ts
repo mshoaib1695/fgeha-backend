@@ -723,6 +723,7 @@ export class RequestsService {
       subSectorId: number;
       subSectorName: string;
       houseNo: string;
+      streetNo: string;
       userName: string;
       cnicNo: string | null;
       mobileNo: string;
@@ -857,6 +858,7 @@ export class RequestsService {
       .select('u.sub_sector_id', 'subSectorId')
       .addSelect('COALESCE(ss.name, "N/A")', 'subSectorName')
       .addSelect('u.house_no', 'houseNo')
+      .addSelect('u.street_no', 'streetNo')
       .addSelect('u.full_name', 'userName')
       .addSelect('NULL', 'cnicNo')
       .addSelect('CONCAT(COALESCE(u.phone_country_code, ""), " ", COALESCE(u.phone_number, ""))', 'mobileNo')
@@ -868,6 +870,7 @@ export class RequestsService {
         subSectorId: string;
         subSectorName: string;
         houseNo: string;
+        streetNo: string;
         userName: string;
         cnicNo: string | null;
         mobileNo: string;
@@ -878,6 +881,7 @@ export class RequestsService {
         subSectorId: Number(row.subSectorId) || 0,
         subSectorName: row.subSectorName,
         houseNo: row.houseNo,
+        streetNo: (row.streetNo ?? '').trim(),
         userName: row.userName,
         cnicNo: row.cnicNo,
         mobileNo: (row.mobileNo ?? '').trim(),
