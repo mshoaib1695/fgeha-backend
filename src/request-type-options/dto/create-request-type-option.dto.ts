@@ -71,4 +71,32 @@ export class CreateRequestTypeOptionDto {
   @IsString()
   @MaxLength(20)
   requestNumberPrefix?: string | null;
+
+  /** Optional: limit one request per (same house + street + sector) in this period. Values: none, day, week, month. Only for form options. */
+  @ApiPropertyOptional({ enum: ['none', 'day', 'week', 'month'], maxLength: 10 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  duplicateRestrictionPeriod?: string | null;
+
+  /** Optional: e.g. "13:00" – requests only after this time (within restriction days). */
+  @ApiPropertyOptional({ maxLength: 5 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(5)
+  restrictionStartTime?: string | null;
+
+  /** Optional: e.g. "14:00" – requests only before this time. */
+  @ApiPropertyOptional({ maxLength: 5 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(5)
+  restrictionEndTime?: string | null;
+
+  /** Optional: comma-separated 0–6 (0=Sun, 1=Mon, …, 6=Sat), e.g. "1,2,3,4,5" for Mon–Fri. */
+  @ApiPropertyOptional({ maxLength: 20 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  restrictionDays?: string | null;
 }

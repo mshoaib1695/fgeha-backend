@@ -142,6 +142,10 @@ export class RequestTypeOptionsService {
       requestNumberPrefix: prefix,
       requestNumberPadding: 4,
       requestNumberNext: 1,
+      duplicateRestrictionPeriod: dto.duplicateRestrictionPeriod ?? 'none',
+      restrictionStartTime: dto.restrictionStartTime ?? null,
+      restrictionEndTime: dto.restrictionEndTime ?? null,
+      restrictionDays: dto.restrictionDays ?? null,
     });
     return this.repo.save(option);
   }
@@ -182,6 +186,10 @@ export class RequestTypeOptionsService {
     if (!option.requestNumberNext || option.requestNumberNext < 1) {
       option.requestNumberNext = 1;
     }
+    if (dto.duplicateRestrictionPeriod !== undefined) option.duplicateRestrictionPeriod = dto.duplicateRestrictionPeriod ?? 'none';
+    if (dto.restrictionStartTime !== undefined) option.restrictionStartTime = dto.restrictionStartTime ?? null;
+    if (dto.restrictionEndTime !== undefined) option.restrictionEndTime = dto.restrictionEndTime ?? null;
+    if (dto.restrictionDays !== undefined) option.restrictionDays = dto.restrictionDays ?? null;
     return this.repo.save(option);
   }
 

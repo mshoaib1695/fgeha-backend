@@ -336,6 +336,16 @@ export class UsersService implements OnModuleInit {
     });
   }
 
+  async findDeactivated(user: User): Promise<User[]> {
+    if (user.role !== UserRole.ADMIN)
+      throw new ForbiddenException('Admin only');
+    return this.userRepo.find({
+      where: { accountStatus: AccountStatus.DEACTIVATED },
+      order: { createdAt: 'DESC' },
+      relations: ['subSector'],
+    });
+  }
+
   async findOne(id: number, currentUser: User): Promise<User> {
     const u = await this.userRepo.findOne({
       where: { id },

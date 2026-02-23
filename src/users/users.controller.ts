@@ -59,6 +59,14 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth('JWT')
+  @Get('deactivated')
+  findDeactivated(@CurrentUser() user: User) {
+    return this.usersService.findDeactivated(user as User);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth('JWT')
   @Get('with-request-count')
   findUsersWithRequestCount(@CurrentUser() user: User) {
     return this.usersService.findUsersWithRequestCount(user as User);

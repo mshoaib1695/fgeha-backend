@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThanOrEqual, Repository, SelectQueryBuilder } from 'typeorm';
+import { In, MoreThanOrEqual, Repository, SelectQueryBuilder } from 'typeorm';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { Request as RequestEntity, RequestStatus } from './entities/request.entity';
@@ -17,6 +17,7 @@ import { SubSector } from '../users/entities/sub-sector.entity';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateRequestStatusDto } from './dto/update-request-status.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
+import { CancelRequestDto } from './dto/cancel-request.dto';
 import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
 
 /**
@@ -193,14 +194,15 @@ function formatRequestNumber(prefix: string, num: number, padding: number): stri
 /**
  * Check if current time (UTC) is within the request type restriction.
  * Start/end and allowed days use the admin timezone (e.g. Asia/Karachi); no hardcoded offset.
+ * Restriction is per service option (e.g. "Order water tanker"), not per request type.
  */
 function assertWithinRestriction(
-  type: RequestTypeEntity,
-  typeName: string,
+  option: { restrictionStartTime?: string | null; restrictionEndTime?: string | null; restrictionDays?: string | null },
+  optionName: string,
 ): void {
-  const start = type.restrictionStartTime?.trim();
-  const end = type.restrictionEndTime?.trim();
-  const days = type.restrictionDays?.trim();
+  const start = option.restrictionStartTime?.trim();
+  const end = option.restrictionEndTime?.trim();
+  const days = option.restrictionDays?.trim();
   if (!start || !end || !days) return;
 
   const now = new Date();
@@ -210,7 +212,7 @@ function assertWithinRestriction(
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const allowedNames = allowedDays.map((d) => dayNames[d] ?? d).join(', ');
     throw new ForbiddenException(
-      `${typeName} request window: allowed only on ${allowedNames}.`,
+      `${optionName} request window: allowed only on ${allowedNames}.`,
     );
   }
 
@@ -223,7 +225,7 @@ function assertWithinRestriction(
 
   if (nowUtc < startUtc || nowUtc > endUtc) {
     throw new ForbiddenException(
-      `${typeName} request window: allowed only between ${start} and ${end}.`,
+      `${optionName} request window: allowed only between ${start} and ${end}.`,
     );
   }
 }
@@ -353,29 +355,39 @@ export class RequestsService {
     if (!requestType)
       throw new ForbiddenException('Invalid request type');
 
+    const selectedOption = await this.requestTypeOptionRepo.findOne({
+      where: {
+        id: createRequestDto.requestTypeOptionId,
+        requestTypeId: createRequestDto.requestTypeId,
+      },
+    });
+    if (!selectedOption) {
+      throw new ConflictException('Invalid service option selected');
+    }
+
     this.logger.log(
-      `[Request create] attempt userId=${user.id} requestTypeId=${createRequestDto.requestTypeId} requestTypeName="${requestType.name}" ` +
+      `[Request create] attempt userId=${user.id} requestTypeId=${createRequestDto.requestTypeId} requestTypeName="${requestType.name}" option="${selectedOption.label}" ` +
         `timeUtc=${timeUtc} timeAdminTz=${timeAdminTz} (${ADMIN_INPUT_TIMEZONE})`,
     );
 
-    const start = requestType.restrictionStartTime?.trim();
-    const end = requestType.restrictionEndTime?.trim();
-    const days = requestType.restrictionDays?.trim();
+    const start = selectedOption.restrictionStartTime?.trim();
+    const end = selectedOption.restrictionEndTime?.trim();
+    const days = selectedOption.restrictionDays?.trim();
     if (start && end && days) {
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const allowedDayNames = days.split(',').map((d) => dayNames[parseInt(d.trim(), 10)] ?? d.trim()).join(', ');
       this.logger.log(
-        `[Request create] allowed window for "${requestType.name}": ${start}-${end} (${ADMIN_INPUT_TIMEZONE}) days=[${allowedDayNames}]`,
+        `[Request create] allowed window for "${selectedOption.label}": ${start}-${end} (${ADMIN_INPUT_TIMEZONE}) days=[${allowedDayNames}]`,
       );
     } else {
-      this.logger.log(`[Request create] no time restriction for "${requestType.name}"`);
+      this.logger.log(`[Request create] no time restriction for "${selectedOption.label}"`);
     }
 
     try {
-      assertWithinRestriction(requestType, requestType.name);
+      assertWithinRestriction(selectedOption, selectedOption.label);
     } catch (e) {
       this.logger.warn(
-        `[Request create] REJECTED userId=${user.id} requestTypeName="${requestType.name}" timeUtc=${timeUtc} timeAdminTz=${timeAdminTz} reason=${e instanceof Error ? e.message : String(e)}`,
+        `[Request create] REJECTED userId=${user.id} option="${selectedOption.label}" timeUtc=${timeUtc} timeAdminTz=${timeAdminTz} reason=${e instanceof Error ? e.message : String(e)}`,
       );
       throw e;
     }
@@ -386,16 +398,29 @@ export class RequestsService {
     if (!subSector)
       throw new ConflictException('Invalid sub sector');
 
-    let issueImageRequirement: 'none' | 'optional' | 'required' = 'none';
-    const selectedOption = await this.requestTypeOptionRepo.findOne({
+    // Block if same address already has a pending or in-progress request for this service option
+    const existingActive = await this.requestRepo.findOne({
       where: {
-        id: createRequestDto.requestTypeOptionId,
-        requestTypeId: createRequestDto.requestTypeId,
+        requestTypeOptionId: createRequestDto.requestTypeOptionId,
+        houseNo: createRequestDto.houseNo.trim(),
+        streetNo: createRequestDto.streetNo.trim(),
+        subSectorId: createRequestDto.subSectorId,
+        status: In([RequestStatus.PENDING, RequestStatus.IN_PROGRESS]),
       },
+      select: ['id', 'requestNumber'],
     });
-    if (!selectedOption) {
-      throw new ConflictException('Invalid service option selected');
+    if (existingActive) {
+      const scopeName = selectedOption?.label?.trim() || requestType.name;
+      this.logger.warn(
+        `[Request create] REJECTED active request exists userId=${user.id} option="${scopeName}" requestId=${existingActive.id}`,
+      );
+      const requestIdDisplay = existingActive.requestNumber || `#${existingActive.id}`;
+      throw new ForbiddenException(
+        `You have an open request for "${selectedOption.label}" at this address (${requestIdDisplay}). Complete or cancel it to submit a new one.`,
+      );
     }
+
+    let issueImageRequirement: 'none' | 'optional' | 'required' = 'none';
     if (selectedOption.optionType === 'form') {
       const cfgRequirement = selectedOption.config?.issueImage;
       issueImageRequirement =
@@ -408,7 +433,7 @@ export class RequestsService {
     }
     const issueImageUrl = issueImage ? this.saveRequestImage(issueImage) : null;
 
-    const period = (requestType.duplicateRestrictionPeriod ?? 'none').toLowerCase();
+    const period = (selectedOption.duplicateRestrictionPeriod ?? 'none').toLowerCase();
     if (period && period !== 'none') {
       const qb = this.requestRepo
         .createQueryBuilder('r')
@@ -418,7 +443,8 @@ export class RequestsService {
         .andWhere('r.sub_sector_id = :subSectorId', { subSectorId: createRequestDto.subSectorId });
       qb.andWhere('r.request_type_option_id = :requestTypeOptionId', {
         requestTypeOptionId: createRequestDto.requestTypeOptionId,
-      });
+      })
+        .andWhere('r.status != :cancelledStatus', { cancelledStatus: RequestStatus.CANCELLED });
       addCalendarPeriodCondition(qb, period, new Date());
       const count = await qb.getCount();
       if (count > 0) {
@@ -553,6 +579,24 @@ export class RequestsService {
     if (user.role !== UserRole.ADMIN && request.userId !== user.id)
       throw new ForbiddenException('Cannot view this request');
     return request;
+  }
+
+  /** Customer cancels their own request with a reason (app only; admin must not use this). */
+  async cancelByUser(id: number, dto: CancelRequestDto, user: User): Promise<RequestEntity> {
+    if (user.role === UserRole.ADMIN) {
+      throw new ForbiddenException('This action is for customers only. Use the status update to cancel requests.');
+    }
+    const request = await this.requestRepo.findOne({ where: { id } });
+    if (!request) throw new NotFoundException('Request not found');
+    if (request.userId !== user.id) {
+      throw new ForbiddenException('You can only cancel your own request.');
+    }
+    if (request.status !== RequestStatus.PENDING && request.status !== RequestStatus.IN_PROGRESS) {
+      throw new ForbiddenException('Only pending or in-progress requests can be cancelled.');
+    }
+    request.status = RequestStatus.CANCELLED;
+    request.customerCancellationReason = dto.reason.trim();
+    return this.requestRepo.save(request);
   }
 
   async updateStatus(

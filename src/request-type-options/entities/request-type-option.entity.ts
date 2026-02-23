@@ -74,6 +74,24 @@ export class RequestTypeOptionEntity {
   @Column({ type: 'varchar', length: 120, nullable: true })
   hint: string | null;
 
+  /**
+   * Optional: limit one request per (same house + street + sector) for this service option in this period.
+   * Values: 'none' | 'day' | 'week' | 'month'. Default 'none'. Only applies to form options.
+   */
+  @Column({ name: 'duplicate_restriction_period', type: 'varchar', length: 10, nullable: true, default: 'none' })
+  duplicateRestrictionPeriod: string | null;
+
+  /** Optional: allow requests only in this time window (e.g. "13:00" to "14:00"). Null = no restriction. Applies to form options. */
+  @Column({ name: 'restriction_start_time', type: 'varchar', length: 5, nullable: true })
+  restrictionStartTime: string | null;
+
+  @Column({ name: 'restriction_end_time', type: 'varchar', length: 5, nullable: true })
+  restrictionEndTime: string | null;
+
+  /** Optional: comma-separated day numbers 0=Sun, 1=Mon, ..., 6=Sat (e.g. "1,2,3,4,5" = Mon–Fri). Null = no restriction. */
+  @Column({ name: 'restriction_days', type: 'varchar', length: 20, nullable: true })
+  restrictionDays: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

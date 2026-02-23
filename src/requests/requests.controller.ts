@@ -21,6 +21,7 @@ import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateRequestStatusDto } from './dto/update-request-status.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
+import { CancelRequestDto } from './dto/cancel-request.dto';
 import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApprovedUserGuard } from '../auth/guards/approved-user.guard';
@@ -112,6 +113,18 @@ export class RequestsController {
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: User) {
     return this.requestsService.findOne(+id, user as User);
+  }
+
+  /** Customer cancels their own request with a reason. Admin must not use this endpoint. */
+  @UseGuards(JwtAuthGuard, ApprovedUserGuard)
+  @ApiBearerAuth('JWT')
+  @Post(':id/cancel')
+  cancelByUser(
+    @Param('id') id: string,
+    @Body() dto: CancelRequestDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.requestsService.cancelByUser(+id, dto, user as User);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

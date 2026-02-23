@@ -69,6 +69,10 @@ export class Request {
   })
   status: RequestStatus;
 
+  /** Set only when the customer cancels from the app (with a reason). Admin must not set this. */
+  @Column({ name: 'customer_cancellation_reason', type: 'text', nullable: true })
+  customerCancellationReason: string | null;
+
   @Column()
   userId: number;
 
