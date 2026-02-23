@@ -61,6 +61,24 @@ export class AuthController {
   }
 
   @Public()
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: { email: string }) {
+    await this.authService.requestPasswordReset(body?.email ?? '');
+    return { message: 'If this email is registered, a reset code has been sent.' };
+  }
+
+  @Public()
+  @Post('reset-password')
+  async resetPassword(@Body() body: { email: string; code: string; newPassword: string }) {
+    await this.authService.resetPassword(
+      body?.email ?? '',
+      body?.code ?? '',
+      body?.newPassword ?? '',
+    );
+    return { message: 'Password has been reset. You can now sign in.' };
+  }
+
+  @Public()
   @UseGuards(AuthGuard('local'), ApprovedUserGuard)
   @Post('login')
   login(@Body() _body: LoginDto, @CurrentUser() user: { id: number; email: string; fullName: string; role: string; approvalStatus: string }) {

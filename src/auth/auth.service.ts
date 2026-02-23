@@ -45,4 +45,12 @@ export class AuthService {
   async resendVerificationCode(email: string): Promise<void> {
     return this.usersService.resendVerificationCode(email);
   }
+
+  async requestPasswordReset(email: string): Promise<void> {
+    return this.usersService.requestPasswordReset(email);
+  }
+
+  async resetPassword(email: string, code: string, newPassword: string): Promise<void> {
+    return this.usersService.resetPasswordWithCode(email, code, newPassword);
+  }
 }

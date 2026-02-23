@@ -255,6 +255,43 @@ export class UsersService implements OnModuleInit {
     this.logger.log(`Verification code resent to ${user.email}`);
   }
 
+  /** Request password reset: sends 6-digit code to email. Only for app users (USER role). Does not reveal if email exists. */
+  async requestPasswordReset(email: string): Promise<void> {
+    const trimmedEmail = email?.trim();
+    if (!trimmedEmail) throw new BadRequestException('Email is required');
+    const user = await this.userRepo.findOne({
+      where: { email: trimmedEmail, role: UserRole.USER },
+    });
+    if (!user) return;
+    const code = String(Math.floor(100000 + (randomBytes(4).readUInt32BE(0) % 900000)));
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    user.passwordResetCode = code;
+    user.passwordResetCodeExpiresAt = expiresAt;
+    await this.userRepo.save(user);
+    await this.mailService.sendPasswordResetEmail(user.email, code);
+    this.logger.log(`Password reset code sent to ${user.email}`);
+  }
+
+  /** Reset password using email + code. Verifies code then sets new password and clears code. */
+  async resetPasswordWithCode(email: string, code: string, newPassword: string): Promise<void> {
+    const trimmedEmail = email?.trim();
+    const trimmedCode = code?.trim();
+    if (!trimmedEmail || !trimmedCode) throw new BadRequestException('Email and code are required');
+    if (!newPassword || newPassword.length < 6) throw new BadRequestException('Password must be at least 6 characters');
+    const user = await this.userRepo.findOne({
+      where: { email: trimmedEmail, passwordResetCode: trimmedCode },
+    });
+    if (!user) throw new BadRequestException('Invalid or expired reset code');
+    if (user.passwordResetCodeExpiresAt && user.passwordResetCodeExpiresAt < new Date()) {
+      throw new BadRequestException('Reset code has expired. Please request a new one.');
+    }
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.passwordResetCode = null;
+    user.passwordResetCodeExpiresAt = null;
+    await this.userRepo.save(user);
+    this.logger.log(`Password reset completed for user ${user.id} (${user.email})`);
+  }
+
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepo.findOne({ where: { email } });
   }

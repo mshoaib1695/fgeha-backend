@@ -56,4 +56,28 @@ export class MailService {
       this.logger.log(`[No SMTP] Verification code for ${email}: ${code}`);
     }
   }
+
+  async sendPasswordResetEmail(email: string, code: string): Promise<void> {
+    const html = `
+      <p>You requested to reset your password. Your reset code is:</p>
+      <p style="font-size:24px;font-weight:bold;letter-spacing:4px;">${code}</p>
+      <p>Enter this code in the app to set a new password.</p>
+      <p>This code expires in 1 hour. If you did not request this, you can ignore this email.</p>
+    `;
+    if (this.transporter) {
+      try {
+        await this.transporter.sendMail({
+          from: this.from,
+          to: email,
+          subject: 'Reset your password - FGEHA RSP',
+          html,
+        });
+        this.logger.log(`Password reset email sent to ${email}`);
+      } catch (err) {
+        this.logger.error(`Failed to send password reset email to ${email}`, err);
+      }
+    } else {
+      this.logger.log(`[No SMTP] Password reset code for ${email}: ${code}`);
+    }
+  }
 }

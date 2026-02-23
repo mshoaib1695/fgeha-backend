@@ -99,6 +99,13 @@ export class User {
   @Column({ name: 'email_verification_token_expires_at', type: 'datetime', nullable: true })
   emailVerificationTokenExpiresAt: Date | null;
 
+  /** 6-digit code for password reset; null when not requested or after use. */
+  @Column({ name: 'password_reset_code', type: 'varchar', length: 10, nullable: true })
+  passwordResetCode: string | null;
+
+  @Column({ name: 'password_reset_code_expires_at', type: 'datetime', nullable: true })
+  passwordResetCodeExpiresAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
