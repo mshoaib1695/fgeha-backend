@@ -59,6 +59,9 @@ export class UsersService implements OnModuleInit {
     }
   }
 
+  /** Max size per ID card image (5MB). Must match app validation. */
+  private static readonly MAX_ID_CARD_IMAGE_BYTES = 5 * 1024 * 1024;
+
   /**
    * Save a base64 data URL (e.g. data:image/jpeg;base64,...) to idcards folder.
    * Returns relative path like "idcards/uuid-front.jpg".
@@ -69,6 +72,11 @@ export class UsersService implements OnModuleInit {
     const ext = match[1] === 'jpeg' || match[1] === 'jpg' ? 'jpg' : match[1];
     const base64 = match[2];
     const buf = Buffer.from(base64, 'base64');
+    if (buf.length > UsersService.MAX_ID_CARD_IMAGE_BYTES) {
+      throw new BadRequestException(
+        `ID card image is too large (max 5MB per image).`,
+      );
+    }
     const filename = `${randomUUID()}-${suffix}.${ext}`;
     const filePath = path.join(this.idcardsDir, filename);
     fs.writeFileSync(filePath, buf);
