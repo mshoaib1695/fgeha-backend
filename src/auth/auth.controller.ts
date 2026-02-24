@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, ForbiddenException, Query, Res } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, ForbiddenException, Query, Res, Logger } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import type { Response } from 'express';
@@ -22,6 +22,8 @@ function escapeHtml(s: string): string {
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(private readonly authService: AuthService) {}
 
   @Public()
@@ -39,7 +41,10 @@ export class AuthController {
       res.send(
         `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Email verified</title></head><body style="font-family:sans-serif;max-width:480px;margin:60px auto;padding:24px;"><h1>Email verified</h1><p>Your email <strong>${escapeHtml(email)}</strong> has been verified. You can now sign in to the app.</p></body></html>`,
       );
-    } catch {
+    } catch (err) {
+      this.logger.warn(
+        `verify-email GET failed: ${err instanceof Error ? err.message : String(err)} tokenLength=${token?.length ?? 0}`,
+      );
       res.setHeader('Content-Type', 'text/html');
       res.status(400).send(
         `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Verification failed</title></head><body style="font-family:sans-serif;max-width:480px;margin:60px auto;padding:24px;"><h1>Verification failed</h1><p>This link is invalid or has expired. Please request a new verification code from the app.</p></body></html>`,

@@ -147,69 +147,95 @@ export class UsersService implements OnModuleInit {
   static readonly EMAIL_UNVERIFIED_RESENT = 'EMAIL_UNVERIFIED_RESENT';
 
   async create(createUserDto: CreateUserDto): Promise<Omit<User, 'password'>> {
-    const existing = await this.userRepo.findOne({
-      where: { email: createUserDto.email },
-    });
-    if (existing) {
-      if (existing.emailVerified === false) {
-        const verificationCode = String(Math.floor(100000 + (randomBytes(4).readUInt32BE(0) % 900000)));
-        const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        existing.emailVerificationToken = verificationCode;
-        existing.emailVerificationTokenExpiresAt = verificationExpires;
-        await this.userRepo.save(existing);
-        await this.mailService.sendVerificationEmail(existing.email, verificationCode);
-        this.logger.log(`Resent verification code to existing unverified user ${existing.email}`);
-        throw new ConflictException(UsersService.EMAIL_UNVERIFIED_RESENT);
+    const email = createUserDto?.email ?? 'unknown';
+    const subSectorId = createUserDto?.subSectorId;
+    this.logger.log(`Registration start email=${email} subSectorId=${subSectorId}`);
+
+    try {
+      const existing = await this.userRepo.findOne({
+        where: { email: createUserDto.email },
+      });
+      if (existing) {
+        if (existing.emailVerified === false) {
+          const verificationCode = String(Math.floor(100000 + (randomBytes(4).readUInt32BE(0) % 900000)));
+          const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          existing.emailVerificationToken = verificationCode;
+          existing.emailVerificationTokenExpiresAt = verificationExpires;
+          await this.userRepo.save(existing);
+          await this.mailService.sendVerificationEmail(existing.email, verificationCode);
+          this.logger.log(`Resent verification code to existing unverified user ${existing.email}`);
+          throw new ConflictException(UsersService.EMAIL_UNVERIFIED_RESENT);
+        }
+        this.logger.log(`Registration failed: email already registered email=${email}`);
+        throw new ConflictException('Email already registered');
       }
-      throw new ConflictException('Email already registered');
-    }
-    const subSector = await this.subSectorRepo.findOne({
-      where: { id: createUserDto.subSectorId },
-    });
-    if (!subSector)
-      throw new ConflictException('Invalid sub sector');
-    const hashed = await bcrypt.hash(createUserDto.password, 10);
+      const subSector = await this.subSectorRepo.findOne({
+        where: { id: createUserDto.subSectorId },
+      });
+      if (!subSector) {
+        this.logger.warn(`Registration failed: invalid subSectorId=${createUserDto.subSectorId} email=${email}`);
+        throw new ConflictException('Invalid sub sector');
+      }
+      const hashed = await bcrypt.hash(createUserDto.password, 10);
 
-    let idCardFrontPath: string | null = null;
-    let idCardBackPath: string | null = null;
-    if (createUserDto.idCardFront?.trim()) {
-      idCardFrontPath = this.saveIdCardImage(createUserDto.idCardFront.trim(), 'front');
-    }
-    if (createUserDto.idCardBack?.trim()) {
-      idCardBackPath = this.saveIdCardImage(createUserDto.idCardBack.trim(), 'back');
-    }
+      let idCardFrontPath: string | null = null;
+      let idCardBackPath: string | null = null;
+      if (createUserDto.idCardFront?.trim()) {
+        idCardFrontPath = this.saveIdCardImage(createUserDto.idCardFront.trim(), 'front');
+      }
+      if (createUserDto.idCardBack?.trim()) {
+        idCardBackPath = this.saveIdCardImage(createUserDto.idCardBack.trim(), 'back');
+      }
 
-    // 6-digit code for in-app verification screen
-    const verificationCode = String(Math.floor(100000 + (randomBytes(4).readUInt32BE(0) % 900000)));
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      // 6-digit code for in-app verification screen
+      const verificationCode = String(Math.floor(100000 + (randomBytes(4).readUInt32BE(0) % 900000)));
+      const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-    const { idCardFront, idCardBack, ...dtoWithoutCards } = createUserDto;
-    const user = this.userRepo.create({
-      ...dtoWithoutCards,
-      password: hashed,
-      role: UserRole.USER,
-      approvalStatus: ApprovalStatus.APPROVED,
-      accountStatus: AccountStatus.ACTIVE,
-      idCardFront: idCardFrontPath,
-      idCardBack: idCardBackPath,
-      emailVerified: false,
-      emailVerificationToken: verificationCode,
-      emailVerificationTokenExpiresAt: verificationExpires,
-    });
-    const saved = await this.userRepo.save(user);
-    await this.mailService.sendVerificationEmail(saved.email, verificationCode);
-    const { password: _, ...rest } = saved;
-    return rest;
+      const { idCardFront, idCardBack, ...dtoWithoutCards } = createUserDto;
+      const user = this.userRepo.create({
+        ...dtoWithoutCards,
+        password: hashed,
+        role: UserRole.USER,
+        approvalStatus: ApprovalStatus.APPROVED,
+        accountStatus: AccountStatus.ACTIVE,
+        idCardFront: idCardFrontPath,
+        idCardBack: idCardBackPath,
+        emailVerified: false,
+        emailVerificationToken: verificationCode,
+        emailVerificationTokenExpiresAt: verificationExpires,
+      });
+      const saved = await this.userRepo.save(user);
+      await this.mailService.sendVerificationEmail(saved.email, verificationCode);
+      this.logger.log(`Registration success userId=${saved.id} email=${saved.email}`);
+      const { password: _, ...rest } = saved;
+      return rest;
+    } catch (err) {
+      if (err instanceof ConflictException || err instanceof BadRequestException) {
+        throw err;
+      }
+      this.logger.error(
+        `Registration error email=${email}`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      throw err;
+    }
   }
 
   async verifyEmail(tokenOrCode: string): Promise<{ email: string }> {
     const code = tokenOrCode?.trim();
-    if (!code) throw new BadRequestException('Invalid or expired verification code');
+    if (!code) {
+      this.logger.warn('verifyEmail: empty token/code');
+      throw new BadRequestException('Invalid or expired verification code');
+    }
     const user = await this.userRepo.findOne({
       where: { emailVerificationToken: code },
     });
-    if (!user) throw new BadRequestException('Invalid or expired verification code');
+    if (!user) {
+      this.logger.warn(`verifyEmail: no user found for token (length=${code.length})`);
+      throw new BadRequestException('Invalid or expired verification code');
+    }
     if (user.emailVerificationTokenExpiresAt && user.emailVerificationTokenExpiresAt < new Date()) {
+      this.logger.warn(`verifyEmail: code expired for user ${user.id} (${user.email})`);
       throw new BadRequestException('Verification code has expired');
     }
     user.emailVerified = true;
@@ -223,12 +249,19 @@ export class UsersService implements OnModuleInit {
   async verifyEmailByCode(email: string, code: string): Promise<{ email: string }> {
     const trimmedEmail = email?.trim();
     const trimmedCode = code?.trim();
-    if (!trimmedEmail || !trimmedCode) throw new BadRequestException('Email and code are required');
+    if (!trimmedEmail || !trimmedCode) {
+      this.logger.warn(`verifyEmailByCode: missing email or code email=${trimmedEmail ? 'set' : 'missing'}`);
+      throw new BadRequestException('Email and code are required');
+    }
     const user = await this.userRepo.findOne({
       where: { email: trimmedEmail, emailVerificationToken: trimmedCode },
     });
-    if (!user) throw new BadRequestException('Invalid or expired verification code');
+    if (!user) {
+      this.logger.warn(`verifyEmailByCode: invalid or expired code for email=${trimmedEmail}`);
+      throw new BadRequestException('Invalid or expired verification code');
+    }
     if (user.emailVerificationTokenExpiresAt && user.emailVerificationTokenExpiresAt < new Date()) {
+      this.logger.warn(`verifyEmailByCode: code expired for email=${trimmedEmail}`);
       throw new BadRequestException('Verification code has expired');
     }
     user.emailVerified = true;

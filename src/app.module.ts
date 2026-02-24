@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -12,6 +12,7 @@ import { DailyBulletinModule } from './daily-bulletin/daily-bulletin.module';
 import { RequestTypeOptionsModule } from './request-type-options/request-type-options.module';
 import { SubSectorsModule } from './sub-sectors/sub-sectors.module';
 import { VGuard } from './auth/guards/v.guard';
+import { HttpLoggingInterceptor } from './common/http-logging.interceptor';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { VGuard } from './auth/guards/v.guard';
   providers: [
     AppService,
     { provide: APP_GUARD, useClass: VGuard },
+    { provide: APP_INTERCEPTOR, useClass: HttpLoggingInterceptor },
   ],
 })
 export class AppModule {}
