@@ -340,6 +340,33 @@ export class RequestsService {
     user: User,
     issueImage?: { buffer: Buffer; originalname: string; mimetype: string },
   ): Promise<RequestEntity> {
+    const userId = user.id;
+    this.logger.log(
+      `[Request create] start userId=${userId} requestTypeId=${createRequestDto.requestTypeId} requestTypeOptionId=${createRequestDto.requestTypeOptionId} subSectorId=${createRequestDto.subSectorId}`,
+    );
+
+    try {
+      return await this.doCreate(createRequestDto, user, issueImage);
+    } catch (err) {
+      if (
+        err instanceof ForbiddenException ||
+        err instanceof ConflictException
+      ) {
+        throw err;
+      }
+      this.logger.error(
+        `[Request create] error userId=${userId} requestTypeId=${createRequestDto.requestTypeId}`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      throw err;
+    }
+  }
+
+  private async doCreate(
+    createRequestDto: CreateRequestDto,
+    user: User,
+    issueImage?: { buffer: Buffer; originalname: string; mimetype: string },
+  ): Promise<RequestEntity> {
     const now = new Date();
     const timeUtc = now.toISOString();
     const timeAdminTz = new Intl.DateTimeFormat('en-CA', {
@@ -352,8 +379,10 @@ export class RequestsService {
     const requestType = await this.requestTypeRepo.findOne({
       where: { id: createRequestDto.requestTypeId },
     });
-    if (!requestType)
+    if (!requestType) {
+      this.logger.warn(`[Request create] REJECTED userId=${user.id} invalid requestTypeId=${createRequestDto.requestTypeId}`);
       throw new ForbiddenException('Invalid request type');
+    }
 
     const selectedOption = await this.requestTypeOptionRepo.findOne({
       where: {
@@ -362,6 +391,9 @@ export class RequestsService {
       },
     });
     if (!selectedOption) {
+      this.logger.warn(
+        `[Request create] REJECTED userId=${user.id} invalid option requestTypeId=${createRequestDto.requestTypeId} requestTypeOptionId=${createRequestDto.requestTypeOptionId}`,
+      );
       throw new ConflictException('Invalid service option selected');
     }
 
@@ -395,8 +427,10 @@ export class RequestsService {
     const subSector = await this.subSectorRepo.findOne({
       where: { id: createRequestDto.subSectorId },
     });
-    if (!subSector)
+    if (!subSector) {
+      this.logger.warn(`[Request create] REJECTED userId=${user.id} invalid subSectorId=${createRequestDto.subSectorId}`);
       throw new ConflictException('Invalid sub sector');
+    }
 
     // Block if same address already has a pending or in-progress request for this service option
     const existingActive = await this.requestRepo.findOne({
@@ -429,6 +463,9 @@ export class RequestsService {
           : 'optional';
     }
     if (issueImageRequirement === 'required' && !issueImage) {
+      this.logger.warn(
+        `[Request create] REJECTED userId=${user.id} option="${selectedOption.label}" issue image required but not provided`,
+      );
       throw new ConflictException('Please upload an issue image for this service');
     }
     const issueImageUrl = issueImage ? this.saveRequestImage(issueImage) : null;
@@ -512,7 +549,7 @@ export class RequestsService {
       return requestRepo.save(request);
     });
     this.logger.log(
-      `[Request create] SUCCESS requestId=${saved.id} userId=${user.id} requestTypeName="${requestType.name}" timeUtc=${timeUtc}`,
+      `[Request create] SUCCESS requestId=${saved.id} requestNumber=${saved.requestNumber} userId=${user.id} requestTypeName="${requestType.name}" option="${selectedOption.label}" timeUtc=${timeUtc}`,
     );
     return saved;
   }
