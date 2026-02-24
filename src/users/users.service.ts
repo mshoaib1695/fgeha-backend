@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Like, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -350,30 +350,74 @@ export class UsersService implements OnModuleInit {
     return bcrypt.compare(plain, hashed);
   }
 
-  async findAll(user: User): Promise<User[]> {
+  async findAll(user: User, search?: string): Promise<User[]> {
     if (user.role !== UserRole.ADMIN)
       throw new ForbiddenException('Admin only');
+    const term = search?.trim();
+    if (!term) {
+      return this.userRepo.find({
+        order: { createdAt: 'DESC' },
+        relations: ['subSector'],
+      });
+    }
+    const pattern = `%${term}%`;
     return this.userRepo.find({
+      where: [
+        { email: Like(pattern) },
+        { fullName: Like(pattern) },
+        { houseNo: Like(pattern) },
+        { streetNo: Like(pattern) },
+      ],
       order: { createdAt: 'DESC' },
       relations: ['subSector'],
     });
   }
 
-  async findPending(user: User): Promise<User[]> {
+  async findPending(user: User, search?: string): Promise<User[]> {
     if (user.role !== UserRole.ADMIN)
       throw new ForbiddenException('Admin only');
+    const term = search?.trim();
+    const baseWhere = { approvalStatus: ApprovalStatus.PENDING };
+    if (!term) {
+      return this.userRepo.find({
+        where: baseWhere,
+        order: { createdAt: 'DESC' },
+        relations: ['subSector'],
+      });
+    }
+    const pattern = `%${term}%`;
     return this.userRepo.find({
-      where: { approvalStatus: ApprovalStatus.PENDING },
+      where: [
+        { ...baseWhere, email: Like(pattern) },
+        { ...baseWhere, fullName: Like(pattern) },
+        { ...baseWhere, houseNo: Like(pattern) },
+        { ...baseWhere, streetNo: Like(pattern) },
+      ],
       order: { createdAt: 'DESC' },
       relations: ['subSector'],
     });
   }
 
-  async findDeactivated(user: User): Promise<User[]> {
+  async findDeactivated(user: User, search?: string): Promise<User[]> {
     if (user.role !== UserRole.ADMIN)
       throw new ForbiddenException('Admin only');
+    const term = search?.trim();
+    const baseWhere = { accountStatus: AccountStatus.DEACTIVATED };
+    if (!term) {
+      return this.userRepo.find({
+        where: baseWhere,
+        order: { createdAt: 'DESC' },
+        relations: ['subSector'],
+      });
+    }
+    const pattern = `%${term}%`;
     return this.userRepo.find({
-      where: { accountStatus: AccountStatus.DEACTIVATED },
+      where: [
+        { ...baseWhere, email: Like(pattern) },
+        { ...baseWhere, fullName: Like(pattern) },
+        { ...baseWhere, houseNo: Like(pattern) },
+        { ...baseWhere, streetNo: Like(pattern) },
+      ],
       order: { createdAt: 'DESC' },
       relations: ['subSector'],
     });

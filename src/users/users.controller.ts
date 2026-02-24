@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
@@ -44,24 +45,39 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth('JWT')
   @Get()
-  findAll(@CurrentUser() user: User) {
-    return this.usersService.findAll(user as User);
+  findAll(
+    @CurrentUser() user: User,
+    @Query('search') search?: string,
+    @Query('q') q?: string,
+  ) {
+    const term = search?.trim() || q?.trim();
+    return this.usersService.findAll(user as User, term || undefined);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth('JWT')
   @Get('pending')
-  findPending(@CurrentUser() user: User) {
-    return this.usersService.findPending(user as User);
+  findPending(
+    @CurrentUser() user: User,
+    @Query('search') search?: string,
+    @Query('q') q?: string,
+  ) {
+    const term = search?.trim() || q?.trim();
+    return this.usersService.findPending(user as User, term || undefined);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth('JWT')
   @Get('deactivated')
-  findDeactivated(@CurrentUser() user: User) {
-    return this.usersService.findDeactivated(user as User);
+  findDeactivated(
+    @CurrentUser() user: User,
+    @Query('search') search?: string,
+    @Query('q') q?: string,
+  ) {
+    const term = search?.trim() || q?.trim();
+    return this.usersService.findDeactivated(user as User, term || undefined);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
