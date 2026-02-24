@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -14,8 +15,11 @@ import { SubSectorsModule } from './sub-sectors/sub-sectors.module';
 import { VGuard } from './auth/guards/v.guard';
 import { HttpLoggingInterceptor } from './common/http-logging.interceptor';
 
+const useSentry = !!process.env.SENTRY_DSN?.trim();
+
 @Module({
   imports: [
+    ...(useSentry ? [SentryModule.forRoot()] : []),
     ConfigModule.forRoot({
       envFilePath: ['.env', 'src/.env'],
       isGlobal: true,
@@ -45,6 +49,7 @@ import { HttpLoggingInterceptor } from './common/http-logging.interceptor';
   controllers: [AppController],
   providers: [
     AppService,
+    ...(useSentry ? [{ provide: APP_FILTER, useClass: SentryGlobalFilter }] : []),
     { provide: APP_GUARD, useClass: VGuard },
     { provide: APP_INTERCEPTOR, useClass: HttpLoggingInterceptor },
   ],

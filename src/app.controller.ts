@@ -15,6 +15,16 @@ export class AppController {
   }
 
   @Public()
+  @Get('sentry-test')
+  @ApiOperation({ summary: 'Trigger test error for Sentry (disabled in production)' })
+  sentryTest(): string | never {
+    if (process.env.NODE_ENV === 'production') {
+      return 'Sentry test route is disabled in production.';
+    }
+    throw new Error('Sentry test error');
+  }
+
+  @Public()
   @Get('health')
   @ApiOperation({ summary: 'Health check - no auth required' })
   health(): { status: string; timestamp: string } {

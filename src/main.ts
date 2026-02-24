@@ -1,3 +1,6 @@
+// Load .env before instrument so SENTRY_DSN is available (ConfigModule runs later).
+import './load-env';
+import './instrument';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -21,7 +24,7 @@ async function bootstrap() {
   server.use('/request-images', express.static(path.join(process.cwd(), 'request-images')));
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
   app.enableCors({
-    origin: true, // allow any origin in dev; set to admin URL in production
+    origin: true,
     credentials: true,
     exposedHeaders: ['X-Total-Count'], // so admin can read total for pagination
   });
