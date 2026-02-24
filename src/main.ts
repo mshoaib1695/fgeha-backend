@@ -23,6 +23,7 @@ async function bootstrap() {
   app.enableCors({
     origin: true, // allow any origin in dev; set to admin URL in production
     credentials: true,
+    exposedHeaders: ['X-Total-Count'], // so admin can read total for pagination
   });
   app.useGlobalPipes(
     new ValidationPipe({
