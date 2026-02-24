@@ -288,14 +288,14 @@ export class UsersService implements OnModuleInit {
     this.logger.log(`Verification code resent to ${user.email}`);
   }
 
-  /** Request password reset: sends 6-digit code to email. Only for app users (USER role). Does not reveal if email exists. */
+  /** Request password reset: sends 6-digit code to email. Only for app users (USER role). */
   async requestPasswordReset(email: string): Promise<void> {
     const trimmedEmail = email?.trim();
     if (!trimmedEmail) throw new BadRequestException('Email is required');
     const user = await this.userRepo.findOne({
       where: { email: trimmedEmail, role: UserRole.USER },
     });
-    if (!user) return;
+    if (!user) throw new NotFoundException('No account found with this email address.');
     const code = String(Math.floor(100000 + (randomBytes(4).readUInt32BE(0) % 900000)));
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     user.passwordResetCode = code;
