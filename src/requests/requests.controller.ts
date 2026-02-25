@@ -130,18 +130,6 @@ export class RequestsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth('JWT')
-  @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() dto: UpdateRequestDto,
-    @CurrentUser() user: User,
-  ) {
-    return this.requestsService.update(+id, dto, user as User);
-  }
-
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @ApiBearerAuth('JWT')
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
@@ -149,6 +137,18 @@ export class RequestsController {
     @CurrentUser() user: User,
   ) {
     return this.requestsService.updateStatus(+id, dto, user as User);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth('JWT')
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateRequestDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.requestsService.update(+id, dto, user as User);
   }
 
   @UseGuards(JwtAuthGuard)
