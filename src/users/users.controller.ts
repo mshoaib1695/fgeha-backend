@@ -70,6 +70,19 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth('JWT')
+  @Get('unverified-email')
+  findUnverifiedEmail(
+    @CurrentUser() user: User,
+    @Query('search') search?: string,
+    @Query('q') q?: string,
+  ) {
+    const term = search?.trim() || q?.trim();
+    return this.usersService.findUnverifiedEmail(user as User, term || undefined);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth('JWT')
   @Get('deactivated')
   findDeactivated(
     @CurrentUser() user: User,
@@ -116,8 +129,10 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
   @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() user: User) {
-    return this.usersService.findOne(+id, user as User);
+  async findOne(@Param('id') id: string, @CurrentUser() user: User) {
+    const full = await this.usersService.findOne(+id, user as User);
+    const { password: _, ...rest } = full;
+    return rest;
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -130,6 +145,14 @@ export class UsersController {
     @CurrentUser() user: User,
   ) {
     return this.usersService.update(+id, updateUserDto, user as User);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth('JWT')
+  @Patch(':id/verify-email')
+  verifyEmailAdmin(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.usersService.verifyEmailAdmin(+id, user as User);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

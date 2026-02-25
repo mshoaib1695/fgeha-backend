@@ -406,6 +406,31 @@ export class UsersService implements OnModuleInit {
     });
   }
 
+  async findUnverifiedEmail(user: User, search?: string): Promise<User[]> {
+    if (user.role !== UserRole.ADMIN)
+      throw new ForbiddenException('Admin only');
+    const term = search?.trim();
+    const baseWhere = { emailVerified: false };
+    if (!term) {
+      return this.userRepo.find({
+        where: baseWhere,
+        order: { createdAt: 'DESC' },
+        relations: ['subSector'],
+      });
+    }
+    const pattern = `%${term}%`;
+    return this.userRepo.find({
+      where: [
+        { ...baseWhere, email: Like(pattern) },
+        { ...baseWhere, fullName: Like(pattern) },
+        { ...baseWhere, houseNo: Like(pattern) },
+        { ...baseWhere, streetNo: Like(pattern) },
+      ],
+      order: { createdAt: 'DESC' },
+      relations: ['subSector'],
+    });
+  }
+
   async findDeactivated(user: User, search?: string): Promise<User[]> {
     if (user.role !== UserRole.ADMIN)
       throw new ForbiddenException('Admin only');
@@ -531,6 +556,20 @@ export class UsersService implements OnModuleInit {
     }
     if (updateUserDto.idCardPhoto !== undefined)
       user.idCardPhoto = updateUserDto.idCardPhoto;
+    const saved = await this.userRepo.save(user);
+    const { password: _, ...rest } = saved;
+    return rest;
+  }
+
+  /** Admin: manually verify a user's email (e.g. when they didn't receive the verification email). */
+  async verifyEmailAdmin(id: number, currentUser: User): Promise<Omit<User, 'password'>> {
+    if (currentUser.role !== UserRole.ADMIN)
+      throw new ForbiddenException('Admin only');
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    user.emailVerified = true;
+    user.emailVerificationToken = null;
+    user.emailVerificationTokenExpiresAt = null;
     const saved = await this.userRepo.save(user);
     const { password: _, ...rest } = saved;
     return rest;
