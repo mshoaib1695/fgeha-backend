@@ -104,9 +104,9 @@ export class DailyBulletinService implements OnModuleInit {
     return this.repo.save(bulletin);
   }
 
-  /** Delete bulletin by date (admin). */
-  async removeByDate(date: string): Promise<void> {
-    const bulletin = await this.repo.findOne({ where: { date } });
+  /** Delete bulletin by id (admin). */
+  async removeById(id: number): Promise<void> {
+    const bulletin = await this.repo.findOne({ where: { id } });
     if (!bulletin) return;
     const fullPath = path.join(process.cwd(), bulletin.filePath);
     if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);

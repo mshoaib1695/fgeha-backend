@@ -5,6 +5,7 @@ import {
   Delete,
   Body,
   Param,
+  ParseIntPipe,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -92,12 +93,12 @@ export class DailyBulletinController {
     return this.service.upsert(dto, file);
   }
 
-  /** Admin: delete bulletin for a date. */
+  /** Admin: delete bulletin by id. */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth('JWT')
-  @Delete(':date')
-  remove(@Param('date') date: string, @CurrentUser() user: User) {
-    return this.service.removeByDate(date);
+  @Delete(':id')
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
+    return this.service.removeById(id);
   }
 }
