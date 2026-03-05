@@ -59,8 +59,8 @@ export class UsersService implements OnModuleInit {
     }
   }
 
-  /** Max size per ID card image (5MB). Must match app validation. */
-  private static readonly MAX_ID_CARD_IMAGE_BYTES = 5 * 1024 * 1024;
+  /** Max size per ID card image (8MB). Must match app validation. */
+  private static readonly MAX_ID_CARD_IMAGE_BYTES = 8 * 1024 * 1024;
 
   /**
    * Save a base64 data URL (e.g. data:image/jpeg;base64,...) to idcards folder.

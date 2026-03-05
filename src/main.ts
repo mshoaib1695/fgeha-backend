@@ -9,8 +9,8 @@ import express from 'express';
 import path from 'path';
 import { AppModule } from './app.module';
 
-/** Max JSON body size (e.g. profile image base64). If using nginx, set client_max_body_size to match. */
-const BODY_LIMIT = '20mb';
+/** Max JSON body size (e.g. profile image base64, registration ID cards). If using nginx, set client_max_body_size to match. */
+const BODY_LIMIT = '30mb';
 
 async function bootstrap() {
   const server = express();
