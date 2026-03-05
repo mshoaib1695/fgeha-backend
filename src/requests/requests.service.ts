@@ -175,6 +175,14 @@ function parseHHmm(s: string): { h: number; m: number } {
   return { h: h ?? 0, m: m ?? 0 };
 }
 
+/** Format "HH:mm" as 12-hour am/pm (e.g. "13:00" -> "1pm", "09:30" -> "9:30am"). */
+function formatHHmmToAmPm(s: string): string {
+  const { h, m } = parseHHmm(s);
+  const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  const ampm = h < 12 ? 'am' : 'pm';
+  return m === 0 ? `${hour12}${ampm}` : `${hour12}:${String(m).padStart(2, '0')}${ampm}`;
+}
+
 type ReportsPeriod = 'today' | 'week' | 'month' | 'custom';
 const TANKER_OPTION_SLUG = 'order_water_tanker';
 
@@ -224,8 +232,10 @@ function assertWithinRestriction(
   const nowUtc = now.getTime();
 
   if (nowUtc < startUtc || nowUtc > endUtc) {
+    const startAmPm = formatHHmmToAmPm(start);
+    const endAmPm = formatHHmmToAmPm(end);
     throw new ForbiddenException(
-      `${optionName} request window: allowed only between ${start} and ${end}.`,
+      `${optionName} request window: allowed only between ${startAmPm} and ${endAmPm}.`,
     );
   }
 }
