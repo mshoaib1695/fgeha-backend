@@ -125,7 +125,7 @@ export class AppSettingsService {
 
     if (updates.ratingEnabled !== undefined) {
       let row = await this.repo.findOne({ where: { key: RATING_ENABLED_KEY } });
-      const val = updates.ratingEnabled ? 'true' : 'false';
+      const val = updates.ratingEnabled === true ? 'true' : 'false';
       if (!row) {
         row = this.repo.create({
           key: RATING_ENABLED_KEY,
