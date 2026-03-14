@@ -12,6 +12,9 @@ import { RequestTypesModule } from './request-types/request-types.module';
 import { DailyBulletinModule } from './daily-bulletin/daily-bulletin.module';
 import { RequestTypeOptionsModule } from './request-type-options/request-type-options.module';
 import { SubSectorsModule } from './sub-sectors/sub-sectors.module';
+import { FeedbackModule } from './feedback/feedback.module';
+import { NewsModule } from './news/news.module';
+import { AppSettingsModule } from './app-settings/app-settings.module';
 import { VGuard } from './auth/guards/v.guard';
 import { HttpLoggingInterceptor } from './common/http-logging.interceptor';
 
@@ -45,6 +48,9 @@ const useSentry = !!process.env.SENTRY_DSN?.trim();
     RequestTypeOptionsModule,
     DailyBulletinModule,
     SubSectorsModule,
+    FeedbackModule,
+    NewsModule,
+    AppSettingsModule,
   ],
   controllers: [AppController],
   providers: [

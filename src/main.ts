@@ -22,6 +22,7 @@ async function bootstrap() {
   server.use('/request-type-icons', express.static(path.join(process.cwd(), 'request-type-icons')));
   server.use('/request-type-option-images', express.static(path.join(process.cwd(), 'request-type-option-images')));
   server.use('/request-images', express.static(path.join(process.cwd(), 'request-images')));
+  server.use('/news-images', express.static(path.join(process.cwd(), 'news-images')));
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
   app.enableCors({
     origin: true,
