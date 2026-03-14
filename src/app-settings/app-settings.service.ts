@@ -68,22 +68,23 @@ export class AppSettingsService {
   ): Promise<{ newsSectionTitle: string; newsDetailHeader: string; showNewsSectionHeading: boolean; showNewsCarouselOverlay: boolean; ratingEnabled: boolean }> {
     if (user.role !== UserRole.ADMIN) throw new ForbiddenException('Admin only');
 
-    if (updates.newsSectionTitle !== undefined) {
+    if (updates.newsSectionTitle !== undefined && updates.newsSectionTitle !== null) {
       let row = await this.repo.findOne({ where: { key: NEWS_SECTION_TITLE_KEY } });
+      const val = String(updates.newsSectionTitle ?? '').trim() || DEFAULT_NEWS_SECTION_TITLE;
       if (!row) {
         row = this.repo.create({
           key: NEWS_SECTION_TITLE_KEY,
-          value: updates.newsSectionTitle.trim() || DEFAULT_NEWS_SECTION_TITLE,
+          value: val,
         });
       } else {
-        row.value = updates.newsSectionTitle.trim() || DEFAULT_NEWS_SECTION_TITLE;
+        row.value = val;
       }
       await this.repo.save(row);
     }
 
     if (updates.newsDetailHeader !== undefined) {
       let row = await this.repo.findOne({ where: { key: NEWS_DETAIL_HEADER_KEY } });
-      const val = updates.newsDetailHeader.trim();
+      const val = String(updates.newsDetailHeader ?? '').trim();
       if (!row) {
         row = this.repo.create({
           key: NEWS_DETAIL_HEADER_KEY,
