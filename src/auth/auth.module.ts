@@ -14,10 +14,20 @@ import { LocalStrategy } from './strategies/local.strategy';
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get('JWT_SECRET', 'your-secret-key-change-in-production'),
-        signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '7d') },
-      }),
+      useFactory: (config: ConfigService) => {
+        const secret = config.get<string>('JWT_SECRET');
+        const expiresIn = config.get<string>('JWT_EXPIRES_IN');
+        if (!secret?.trim()) {
+          throw new Error('JWT_SECRET is required');
+        }
+        if (!expiresIn?.trim()) {
+          throw new Error('JWT_EXPIRES_IN is required');
+        }
+        return {
+          secret,
+          signOptions: { expiresIn: expiresIn as any },
+        };
+      },
       inject: [ConfigService],
     }),
   ],
