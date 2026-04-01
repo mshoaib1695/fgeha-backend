@@ -9,7 +9,13 @@ export const NEWS_DETAIL_HEADER_KEY = 'news_detail_header';
 export const SHOW_NEWS_SECTION_HEADING_KEY = 'show_news_section_heading';
 export const SHOW_NEWS_CAROUSEL_OVERLAY_KEY = 'show_news_carousel_overlay';
 export const RATING_ENABLED_KEY = 'rating_enabled';
+export const PAYMENT_BLOCKING_MODE_KEY = 'payment_blocking_mode';
+export const PAYMENT_GRACE_DAYS_DEFAULT_KEY = 'payment_grace_days_default';
+export const DUES_SUPPORT_EMAIL_KEY = 'dues_support_email';
+export const DUES_SUPPORT_PHONE_KEY = 'dues_support_phone';
 const DEFAULT_NEWS_SECTION_TITLE = 'Latest News';
+const DEFAULT_PAYMENT_BLOCKING_MODE = 'blockAfterGracePeriod';
+const DEFAULT_PAYMENT_GRACE_DAYS = 30;
 
 @Injectable()
 export class AppSettingsService {
@@ -25,23 +31,55 @@ export class AppSettingsService {
     showNewsSectionHeading: boolean;
     showNewsCarouselOverlay: boolean;
     ratingEnabled: boolean;
+    paymentBlockingMode: 'blockOnAnyDue' | 'blockAfterGracePeriod';
+    paymentGraceDaysDefault: number;
+    duesSupportEmail: string;
+    duesSupportPhone: string;
   }> {
-    const [sectionRow, detailRow, headingRow, overlayRow, ratingRow] = await Promise.all([
+    const [sectionRow, detailRow, headingRow, overlayRow, ratingRow, blockingModeRow, graceDaysRow, duesSupportEmailRow, duesSupportPhoneRow] = await Promise.all([
       this.repo.findOne({ where: { key: NEWS_SECTION_TITLE_KEY } }),
       this.repo.findOne({ where: { key: NEWS_DETAIL_HEADER_KEY } }),
       this.repo.findOne({ where: { key: SHOW_NEWS_SECTION_HEADING_KEY } }),
       this.repo.findOne({ where: { key: SHOW_NEWS_CAROUSEL_OVERLAY_KEY } }),
       this.repo.findOne({ where: { key: RATING_ENABLED_KEY } }),
+      this.repo.findOne({ where: { key: PAYMENT_BLOCKING_MODE_KEY } }),
+      this.repo.findOne({ where: { key: PAYMENT_GRACE_DAYS_DEFAULT_KEY } }),
+      this.repo.findOne({ where: { key: DUES_SUPPORT_EMAIL_KEY } }),
+      this.repo.findOne({ where: { key: DUES_SUPPORT_PHONE_KEY } }),
     ]);
     const headingVal = headingRow?.value?.trim()?.toLowerCase();
     const overlayVal = overlayRow?.value?.trim()?.toLowerCase();
     const ratingVal = ratingRow?.value?.trim()?.toLowerCase();
+    const paymentBlockingModeRaw = (blockingModeRow?.value ?? '').trim();
+    const paymentBlockingMode =
+      paymentBlockingModeRaw === 'blockOnAnyDue' || paymentBlockingModeRaw === 'blockAfterGracePeriod'
+        ? paymentBlockingModeRaw
+        : DEFAULT_PAYMENT_BLOCKING_MODE;
+    const paymentGraceDaysDefaultRaw = Number(graceDaysRow?.value ?? DEFAULT_PAYMENT_GRACE_DAYS);
+    const paymentGraceDaysDefault = Number.isFinite(paymentGraceDaysDefaultRaw)
+      ? Math.max(0, Math.min(365, Math.floor(paymentGraceDaysDefaultRaw)))
+      : DEFAULT_PAYMENT_GRACE_DAYS;
     return {
       newsSectionTitle: sectionRow?.value?.trim() || DEFAULT_NEWS_SECTION_TITLE,
       newsDetailHeader: detailRow?.value?.trim() ?? '',
       showNewsSectionHeading: headingVal !== 'false' && headingVal !== '0',
       showNewsCarouselOverlay: overlayVal !== 'false' && overlayVal !== '0',
       ratingEnabled: ratingVal !== 'false' && ratingVal !== '0',
+      paymentBlockingMode,
+      paymentGraceDaysDefault,
+      duesSupportEmail: duesSupportEmailRow?.value?.trim() ?? '',
+      duesSupportPhone: duesSupportPhoneRow?.value?.trim() ?? '',
+    };
+  }
+
+  async getPaymentBlockingSettings(): Promise<{
+    blockingMode: 'blockOnAnyDue' | 'blockAfterGracePeriod';
+    graceDaysDefault: number;
+  }> {
+    const appSettings = await this.getForApp();
+    return {
+      blockingMode: appSettings.paymentBlockingMode,
+      graceDaysDefault: appSettings.paymentGraceDaysDefault,
     };
   }
 
@@ -63,9 +101,23 @@ export class AppSettingsService {
       showNewsSectionHeading?: boolean;
       showNewsCarouselOverlay?: boolean;
       ratingEnabled?: boolean;
+      paymentBlockingMode?: 'blockOnAnyDue' | 'blockAfterGracePeriod';
+      paymentGraceDaysDefault?: number;
+      duesSupportEmail?: string;
+      duesSupportPhone?: string;
     },
     user: User,
-  ): Promise<{ newsSectionTitle: string; newsDetailHeader: string; showNewsSectionHeading: boolean; showNewsCarouselOverlay: boolean; ratingEnabled: boolean }> {
+  ): Promise<{
+    newsSectionTitle: string;
+    newsDetailHeader: string;
+    showNewsSectionHeading: boolean;
+    showNewsCarouselOverlay: boolean;
+    ratingEnabled: boolean;
+    paymentBlockingMode: 'blockOnAnyDue' | 'blockAfterGracePeriod';
+    paymentGraceDaysDefault: number;
+    duesSupportEmail: string;
+    duesSupportPhone: string;
+  }> {
     if (user.role !== UserRole.ADMIN) throw new ForbiddenException('Admin only');
 
     if (updates.newsSectionTitle !== undefined && updates.newsSectionTitle !== null) {
@@ -135,6 +187,50 @@ export class AppSettingsService {
       } else {
         row.value = val;
       }
+      await this.repo.save(row);
+    }
+
+    if (updates.paymentBlockingMode !== undefined) {
+      const val =
+        updates.paymentBlockingMode === 'blockOnAnyDue'
+          ? 'blockOnAnyDue'
+          : 'blockAfterGracePeriod';
+      let row = await this.repo.findOne({ where: { key: PAYMENT_BLOCKING_MODE_KEY } });
+      if (!row) {
+        row = this.repo.create({ key: PAYMENT_BLOCKING_MODE_KEY, value: val });
+      } else {
+        row.value = val;
+      }
+      await this.repo.save(row);
+    }
+
+    if (updates.paymentGraceDaysDefault !== undefined) {
+      const normalized = Math.max(0, Math.min(365, Math.floor(Number(updates.paymentGraceDaysDefault))));
+      let row = await this.repo.findOne({ where: { key: PAYMENT_GRACE_DAYS_DEFAULT_KEY } });
+      if (!row) {
+        row = this.repo.create({
+          key: PAYMENT_GRACE_DAYS_DEFAULT_KEY,
+          value: String(normalized),
+        });
+      } else {
+        row.value = String(normalized);
+      }
+      await this.repo.save(row);
+    }
+
+    if (updates.duesSupportEmail !== undefined) {
+      let row = await this.repo.findOne({ where: { key: DUES_SUPPORT_EMAIL_KEY } });
+      const val = String(updates.duesSupportEmail ?? '').trim();
+      if (!row) row = this.repo.create({ key: DUES_SUPPORT_EMAIL_KEY, value: val });
+      else row.value = val;
+      await this.repo.save(row);
+    }
+
+    if (updates.duesSupportPhone !== undefined) {
+      let row = await this.repo.findOne({ where: { key: DUES_SUPPORT_PHONE_KEY } });
+      const val = String(updates.duesSupportPhone ?? '').trim();
+      if (!row) row = this.repo.create({ key: DUES_SUPPORT_PHONE_KEY, value: val });
+      else row.value = val;
       await this.repo.save(row);
     }
 

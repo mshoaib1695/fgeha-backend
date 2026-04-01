@@ -15,6 +15,7 @@ import { SubSectorsModule } from './sub-sectors/sub-sectors.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { NewsModule } from './news/news.module';
 import { AppSettingsModule } from './app-settings/app-settings.module';
+import { HouseDuesModule } from './house-dues/house-dues.module';
 import { VGuard } from './auth/guards/v.guard';
 import { HttpLoggingInterceptor } from './common/http-logging.interceptor';
 
@@ -51,6 +52,7 @@ const useSentry = !!process.env.SENTRY_DSN?.trim();
     FeedbackModule,
     NewsModule,
     AppSettingsModule,
+    HouseDuesModule,
   ],
   controllers: [AppController],
   providers: [

@@ -22,6 +22,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { MailService } from './mail.service';
+import { RegisterPushTokenDto } from './dto/register-push-token.dto';
 
 @Injectable()
 export class UsersService implements OnModuleInit {
@@ -513,6 +514,18 @@ export class UsersService implements OnModuleInit {
     const saved = await this.userRepo.save(user);
     const { password: _, ...rest } = saved;
     return rest;
+  }
+
+  async registerPushTokenMe(
+    currentUser: User,
+    dto: RegisterPushTokenDto,
+  ): Promise<{ success: true; pushToken: string | null }> {
+    const user = await this.userRepo.findOne({ where: { id: currentUser.id } });
+    if (!user) throw new NotFoundException('User not found');
+    const nextToken = String(dto.pushToken ?? '').trim() || null;
+    user.pushToken = nextToken;
+    await this.userRepo.save(user);
+    return { success: true, pushToken: user.pushToken };
   }
 
   async deactivateMe(currentUser: User): Promise<Omit<User, 'password'>> {

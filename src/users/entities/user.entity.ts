@@ -106,6 +106,9 @@ export class User {
   @Column({ name: 'password_reset_code_expires_at', type: 'datetime', nullable: true })
   passwordResetCodeExpiresAt: Date | null;
 
+  @Column({ name: 'push_token', type: 'varchar', length: 255, nullable: true })
+  pushToken: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

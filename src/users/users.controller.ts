@@ -22,6 +22,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserRole } from './entities/user.entity';
 import { User } from './entities/user.entity';
 import { Public } from '../auth/decorators/public.decorator';
+import { RegisterPushTokenDto } from './dto/register-push-token.dto';
 
 @ApiTags('users')
 @Controller('users')
@@ -106,6 +107,13 @@ export class UsersController {
   @Patch('me')
   updateMe(@Body() body: UpdateMeDto, @CurrentUser() user: User) {
     return this.usersService.updateMe(user as User, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @Patch('me/push-token')
+  registerPushTokenMe(@Body() body: RegisterPushTokenDto, @CurrentUser() user: User) {
+    return this.usersService.registerPushTokenMe(user as User, body);
   }
 
   @UseGuards(JwtAuthGuard)

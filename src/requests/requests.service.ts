@@ -19,6 +19,7 @@ import { UpdateRequestStatusDto } from './dto/update-request-status.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
 import { CancelRequestDto } from './dto/cancel-request.dto';
 import { FindRequestsQueryDto } from './dto/find-requests-query.dto';
+import { HouseDuesService } from '../house-dues/house-dues.service';
 
 /**
  * IANA timezone for admin time inputs (e.g. Pakistan).
@@ -255,6 +256,7 @@ export class RequestsService {
     private readonly subSectorRepo: Repository<SubSector>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    private readonly houseDuesService: HouseDuesService,
   ) {}
 
   private resolveReportsDateRange(
@@ -377,6 +379,21 @@ export class RequestsService {
     user: User,
     issueImage?: { buffer: Buffer; originalname: string; mimetype: string },
   ): Promise<RequestEntity> {
+    const dueStatus = await this.houseDuesService.evaluateHouseOutstanding({
+      subSectorId: user.subSectorId,
+      houseNo: user.houseNo,
+      streetNo: user.streetNo,
+    });
+    if (dueStatus.isBlocked) {
+      throw new ForbiddenException({
+        message:
+          `Outstanding payment detected (${dueStatus.totalOutstanding.toFixed(2)}). ` +
+          'Please clear your dues before submitting a new request.',
+        code: 'OUTSTANDING_PAYMENTS_BLOCKED',
+        outstanding: dueStatus,
+      });
+    }
+
     const now = new Date();
     const timeUtc = now.toISOString();
     const timeAdminTz = new Intl.DateTimeFormat('en-CA', {
