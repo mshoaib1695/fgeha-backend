@@ -66,7 +66,7 @@ ALTER TABLE house_due_entries
 CREATE TABLE IF NOT EXISTS house_due_categories (
   id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
-  usage VARCHAR(20) NOT NULL DEFAULT 'both',
+  `usage` VARCHAR(20) NOT NULL DEFAULT 'both',
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_by_admin_id INT NULL,
   createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -78,7 +78,7 @@ CREATE UNIQUE INDEX idx_house_due_categories_name_unique
 
 -- Backfill missing columns for partially-created environments
 ALTER TABLE house_due_categories
-  ADD COLUMN usage VARCHAR(20) NOT NULL DEFAULT 'both';
+  ADD COLUMN `usage` VARCHAR(20) NOT NULL DEFAULT 'both';
 ALTER TABLE house_due_categories
   ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1;
 ALTER TABLE house_due_categories
