@@ -223,7 +223,7 @@ export class HouseDuesService {
     const currentOutstanding = await this.getTotalOutstanding(row);
     if (dto.entryType === 'payment' && amount > currentOutstanding) {
       throw new BadRequestException(
-        `Payment amount (${amount.toFixed(2)}) cannot be greater than outstanding balance (${currentOutstanding.toFixed(2)}).`,
+        `Payment amount (${amount.toFixed(2)}) cannot be greater than outstanding balance (${Math.round(currentOutstanding)}).`,
       );
     }
     let signedAmount = amount;
@@ -402,8 +402,8 @@ export class HouseDuesService {
       eventType === 'payment'
         ? totalOutstanding <= 0
           ? 'Your payment has been recorded. Your outstanding balance is now fully cleared.'
-          : `Your payment has been recorded. Remaining outstanding: PKR ${totalOutstanding.toFixed(2)}.`
-        : `A new charge has been added. Total outstanding: PKR ${totalOutstanding.toFixed(2)}.`;
+          : `Your payment has been recorded. Remaining outstanding: PKR ${Math.round(totalOutstanding)}.`
+        : `A new charge has been added. Total outstanding: PKR ${Math.round(totalOutstanding)}.`;
     await this.pushService.send({
       to: pushTokens,
       title,
@@ -614,7 +614,7 @@ export class HouseDuesService {
         const signedAmount =
           entryType === 'charge' ? amount : entryType === 'payment' ? -amount : adjustmentDirection === 'credit' ? -amount : amount;
         if (entryType === 'payment' && amount > simulated) {
-          throw new Error(`payment amount (${amount.toFixed(2)}) cannot exceed outstanding (${simulated.toFixed(2)})`);
+          throw new Error(`payment amount (${amount.toFixed(2)}) cannot exceed outstanding (${Math.round(simulated)})`);
         }
         houseOutstandingDelta.set(houseKey, toMoney((houseOutstandingDelta.get(houseKey) ?? 0) + signedAmount));
 

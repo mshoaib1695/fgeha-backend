@@ -387,7 +387,7 @@ export class RequestsService {
     if (dueStatus.isBlocked) {
       throw new ForbiddenException({
         message:
-          `Outstanding payment detected (${dueStatus.totalOutstanding.toFixed(2)}). ` +
+          `Outstanding payment detected (${Math.round(dueStatus.totalOutstanding)}). ` +
           'Please clear your dues before submitting a new request.',
         code: 'OUTSTANDING_PAYMENTS_BLOCKED',
         outstanding: dueStatus,

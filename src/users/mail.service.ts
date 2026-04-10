@@ -97,7 +97,8 @@ export class MailService {
     entryAmount?: number;
     message: string;
   }): Promise<void> {
-    const formatPKR = (value: number): string => `PKR ${Number(value || 0).toFixed(2)}`;
+    const formatPKR = (value: number): string =>
+      `PKR ${Math.round(Number(value || 0)).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
     const dueDateObj = input.dueDate ? new Date(input.dueDate) : null;
     const dueDateText = dueDateObj
       ? dueDateObj.toLocaleDateString('en-GB', {
@@ -125,7 +126,7 @@ export class MailService {
     const entryType = input.entryType ?? 'charge';
     const entryCategory = input.entryCategory?.trim() || 'General';
     const entryAmount = Number(input.entryAmount ?? 0);
-    const eventLine = entryAmount > 0 ? `${entryCategory}: ${entryAmount.toFixed(2)}` : '';
+    const eventLine = entryAmount > 0 ? `${entryCategory}: ${Math.round(entryAmount)}` : '';
     const subject =
       entryType === 'payment'
         ? 'Payment received - FGEHA RSP'
@@ -162,8 +163,8 @@ export class MailService {
         <li>Sub-sector: ${input.subSector?.trim() || (input.subSectorId != null ? `#${input.subSectorId}` : 'N/A')}</li>
         <li>House: ${input.houseNo}</li>
         <li>Street: ${input.streetNo}</li>
-        ${entryAmount > 0 ? `<li>New Charge Amount: <strong>${entryAmount.toFixed(2)}</strong></li>` : ''}
-        <li><strong>Total Outstanding: ${input.totalOutstanding.toFixed(2)}</strong></li>
+        ${entryAmount > 0 ? `<li>New Charge Amount: <strong>${Math.round(entryAmount)}</strong></li>` : ''}
+        <li><strong>Total Outstanding: ${Math.round(input.totalOutstanding)}</strong></li>
         <li>Due Date: ${dueDateText}</li>
         <li>${dueStatusLine}</li>
       </ul>
@@ -177,7 +178,7 @@ export class MailService {
         <li>Sub-sector: ${input.subSector?.trim() || (input.subSectorId != null ? `#${input.subSectorId}` : 'N/A')}</li>
         <li>House: ${input.houseNo}</li>
         <li>Street: ${input.streetNo}</li>
-        <li><strong>Total Outstanding: ${input.totalOutstanding.toFixed(2)}</strong></li>
+        <li><strong>Total Outstanding: ${Math.round(input.totalOutstanding)}</strong></li>
         <li>Due Date: ${dueDateText}</li>
         <li>${dueStatusLine}</li>
       </ul>
@@ -209,7 +210,7 @@ export class MailService {
       }
     } else {
       this.logger.log(
-        `[No SMTP] Outstanding payment notice for ${input.to}: total=${input.totalOutstanding.toFixed(2)}, due=${dueDateText}`,
+        `[No SMTP] Outstanding payment notice for ${input.to}: total=${Math.round(input.totalOutstanding)}, due=${dueDateText}`,
       );
     }
   }
