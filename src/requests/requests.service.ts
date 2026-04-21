@@ -477,7 +477,7 @@ export class RequestsService {
       );
       const requestIdDisplay = existingActive.requestNumber || `#${existingActive.id}`;
       throw new ForbiddenException(
-        `You have an open request for "${selectedOption.label}" at this address (${requestIdDisplay}). Complete or cancel it to submit a new one.`,
+        `You have already submitted a request for "${selectedOption.label}" at this address (${requestIdDisplay}). Please wait while we review your request. Cancel your existing request to submit a new one.`,
       );
     }
 
